@@ -116,6 +116,72 @@ class AuthService {
     }
   }
 
+  // Send password reset OTP code
+  Future<void> sendPasswordResetOTP(String email) async {
+    try {
+      debugPrint('AuthService: Sending password reset OTP for email: $email');
+
+      await _supabase.auth.resetPasswordForEmail(email, redirectTo: null);
+
+      debugPrint('AuthService: Password reset OTP sent successfully');
+    } catch (e) {
+      debugPrint('AuthService: Error sending password reset OTP: $e');
+      rethrow;
+    }
+  }
+
+  // Verify OTP code for password reset
+  Future<bool> verifyPasswordResetOTP(String email, String otp) async {
+    try {
+      debugPrint('AuthService: Verifying password reset OTP for email: $email');
+
+      final response = await _supabase.auth.verifyOTP(
+        email: email,
+        token: otp,
+        type: OtpType.recovery,
+      );
+
+      debugPrint(
+        'AuthService: Password reset OTP verification response - User: ${response.user?.id}',
+      );
+
+      return response.user != null;
+    } catch (e) {
+      debugPrint('AuthService: Error verifying password reset OTP: $e');
+      rethrow;
+    }
+  }
+
+  // Reset password with OTP
+  Future<void> resetPassword(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
+    try {
+      debugPrint('AuthService: Resetting password for email: $email');
+
+      // First verify the OTP if not already verified
+      final verifyResponse = await _supabase.auth.verifyOTP(
+        email: email,
+        token: otp,
+        type: OtpType.recovery,
+      );
+
+      // If verification succeeded, update the password
+      if (verifyResponse.user != null) {
+        await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+
+        debugPrint('AuthService: Password reset successful');
+      } else {
+        throw Exception('Invalid OTP verification');
+      }
+    } catch (e) {
+      debugPrint('AuthService: Error resetting password: $e');
+      rethrow;
+    }
+  }
+
   // Verify OTP code
   Future<bool> verifyOTP(String email, String otp) async {
     try {

@@ -25,6 +25,10 @@ class CustomTextField extends StatelessWidget {
   final bool readOnly;
   final String? initialValue;
   final EdgeInsetsGeometry? contentPadding;
+  final bool filled;
+  final Color? fillColor;
+  final BorderRadius? borderRadius;
+  final double elevation;
 
   const CustomTextField({
     Key? key,
@@ -50,6 +54,10 @@ class CustomTextField extends StatelessWidget {
     this.readOnly = false,
     this.initialValue,
     this.contentPadding,
+    this.filled = true,
+    this.fillColor,
+    this.borderRadius,
+    this.elevation = 0,
   }) : super(key: key);
 
   @override
@@ -57,60 +65,122 @@ class CustomTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textColor,
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 8),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textColor,
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          initialValue: initialValue,
-          validator: validator,
-          obscureText: obscureText,
-          keyboardType: keyboardType,
-          maxLines: maxLines,
-          minLines: minLines,
-          enabled: enabled,
-          inputFormatters: inputFormatters,
-          onChanged: onChanged,
-          focusNode: focusNode,
-          textInputAction: textInputAction,
-          onEditingComplete: onEditingComplete,
-          onFieldSubmitted: onFieldSubmitted,
-          autofocus: autofocus,
-          readOnly: readOnly,
-          decoration: InputDecoration(
-            hintText: hint,
-            helperText: helperText,
-            prefixIcon: prefixIcon,
-            suffixIcon: suffixIcon,
-            contentPadding:
-                contentPadding ??
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            filled: true,
-            fillColor: enabled ? Colors.white : Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.secondaryColor),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.secondaryColor),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: AppTheme.accentColor,
-                width: 2,
+        Material(
+          color: Colors.transparent,
+          elevation: elevation,
+          borderRadius: borderRadius ?? BorderRadius.circular(12),
+          child: TextFormField(
+            controller: controller,
+            initialValue: initialValue,
+            validator: validator,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            maxLines: obscureText ? 1 : maxLines,
+            minLines: minLines,
+            enabled: enabled,
+            inputFormatters: inputFormatters,
+            onChanged: onChanged,
+            focusNode: focusNode,
+            textInputAction: textInputAction,
+            onEditingComplete: onEditingComplete,
+            onFieldSubmitted: onFieldSubmitted,
+            autofocus: autofocus,
+            readOnly: readOnly,
+            style: const TextStyle(fontSize: 16, color: AppTheme.textColor),
+            cursorColor: AppTheme.accentColor,
+            cursorWidth: 1.5,
+            decoration: InputDecoration(
+              hintText: hint,
+              helperText: helperText,
+              prefixIcon:
+                  prefixIcon != null
+                      ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: prefixIcon,
+                      )
+                      : null,
+              suffixIcon:
+                  suffixIcon != null
+                      ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: suffixIcon,
+                      )
+                      : null,
+              contentPadding:
+                  contentPadding ??
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              filled: filled,
+              fillColor:
+                  enabled
+                      ? (fillColor ?? AppTheme.surfaceColor)
+                      : Colors.grey[100],
+              hintStyle: TextStyle(
+                color: AppTheme.textLightColor.withOpacity(0.6),
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
               ),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.errorColor),
+              helperStyle: TextStyle(
+                color: AppTheme.textLightColor.withOpacity(0.7),
+                fontSize: 12,
+              ),
+              errorStyle: const TextStyle(
+                color: AppTheme.errorColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppTheme.secondaryColor.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppTheme.secondaryColor.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppTheme.accentColor,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppTheme.errorColor,
+                  width: 1,
+                ),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppTheme.errorColor,
+                  width: 1.5,
+                ),
+              ),
+              disabledBorder: OutlineInputBorder(
+                borderRadius: borderRadius ?? BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppTheme.secondaryColor.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
             ),
           ),
         ),
@@ -132,6 +202,7 @@ class PasswordTextField extends StatefulWidget {
   final void Function(String)? onFieldSubmitted;
   final bool autofocus;
   final String? initialValue;
+  final EdgeInsetsGeometry? contentPadding;
 
   const PasswordTextField({
     Key? key,
@@ -147,6 +218,7 @@ class PasswordTextField extends StatefulWidget {
     this.onFieldSubmitted,
     this.autofocus = false,
     this.initialValue,
+    this.contentPadding,
   }) : super(key: key);
 
   @override
@@ -173,10 +245,12 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
       onFieldSubmitted: widget.onFieldSubmitted,
       autofocus: widget.autofocus,
       initialValue: widget.initialValue,
+      contentPadding: widget.contentPadding,
       suffixIcon: IconButton(
         icon: Icon(
           _obscureText ? Icons.visibility_off : Icons.visibility,
           color: AppTheme.secondaryColor,
+          size: 20,
         ),
         onPressed: () {
           setState(() {

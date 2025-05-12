@@ -200,6 +200,68 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     }
   }
 
+  // Send password reset OTP
+  Future<void> sendPasswordResetOTP(String email) async {
+    try {
+      state = state.copyWith(isLoading: true, errorMessage: null);
+      await _authService.sendPasswordResetOTP(email);
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      debugPrint('AuthNotifier: Error sending password reset OTP: $e');
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            e is AuthException
+                ? e.message
+                : 'Failed to send password reset code. Please try again.',
+      );
+      rethrow;
+    }
+  }
+
+  // Verify password reset OTP
+  Future<bool> verifyPasswordResetOTP(String email, String otp) async {
+    try {
+      state = state.copyWith(isLoading: true, errorMessage: null);
+      final result = await _authService.verifyPasswordResetOTP(email, otp);
+      state = state.copyWith(isLoading: false);
+      return result;
+    } catch (e) {
+      debugPrint('AuthNotifier: Error verifying password reset OTP: $e');
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            e is AuthException
+                ? e.message
+                : 'Failed to verify reset code. Please try again.',
+      );
+      rethrow;
+    }
+  }
+
+  // Reset password
+  Future<void> resetPassword(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
+    try {
+      state = state.copyWith(isLoading: true, errorMessage: null);
+      await _authService.resetPassword(email, otp, newPassword);
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      debugPrint('AuthNotifier: Error resetting password: $e');
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            e is AuthException
+                ? e.message
+                : 'Failed to reset password. Please try again.',
+      );
+      rethrow;
+    }
+  }
+
   // Verify OTP code
   Future<bool> verifyOTP(String email, String otp) async {
     try {

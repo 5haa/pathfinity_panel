@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:admin_panel/config/theme.dart';
 
-enum ButtonType { primary, secondary, success, danger, warning }
+enum ButtonType { primary, secondary, success, danger, warning, outline }
 
 class CustomButton extends StatelessWidget {
   final String text;
@@ -12,6 +12,7 @@ class CustomButton extends StatelessWidget {
   final IconData? icon;
   final double? width;
   final double height;
+  final double borderRadius;
 
   const CustomButton({
     Key? key,
@@ -22,7 +23,8 @@ class CustomButton extends StatelessWidget {
     this.isFullWidth = false,
     this.icon,
     this.width,
-    this.height = 48.0,
+    this.height = 52.0,
+    this.borderRadius = 12.0,
   }) : super(key: key);
 
   @override
@@ -30,36 +32,89 @@ class CustomButton extends StatelessWidget {
     return SizedBox(
       width: isFullWidth ? double.infinity : width,
       height: height,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _getButtonColor(),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        child: _buildButtonContent(),
-      ),
+      child:
+          type == ButtonType.outline
+              ? _buildOutlinedButton()
+              : _buildElevatedButton(),
     );
   }
 
-  Widget _buildButtonContent() {
+  Widget _buildElevatedButton() {
+    return ElevatedButton(
+      onPressed: isLoading ? null : onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _getButtonColor(),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        elevation: 1,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+      ),
+      child: _buildButtonContent(),
+    );
+  }
+
+  Widget _buildOutlinedButton() {
+    return OutlinedButton(
+      onPressed: isLoading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppTheme.accentColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        side: BorderSide(color: _getButtonColor(), width: 1.5),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+      ),
+      child: _buildButtonContent(isOutlined: true),
+    );
+  }
+
+  Widget _buildButtonContent({bool isOutlined = false}) {
     if (isLoading) {
-      return const SizedBox(
+      return SizedBox(
         width: 24,
         height: 24,
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
+        child: CircularProgressIndicator(
+          color: isOutlined ? AppTheme.accentColor : Colors.white,
+          strokeWidth: 2.0,
+        ),
       );
     }
 
     if (icon != null) {
       return Row(
         mainAxisSize: MainAxisSize.min,
-        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(text)],
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: isOutlined ? _getButtonColor() : Colors.white,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+              color: isOutlined ? _getButtonColor() : Colors.white,
+            ),
+          ),
+        ],
       );
     }
 
-    return Text(text);
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.3,
+        color: isOutlined ? _getButtonColor() : Colors.white,
+      ),
+    );
   }
 
   Color _getButtonColor() {
@@ -74,6 +129,8 @@ class CustomButton extends StatelessWidget {
         return AppTheme.errorColor;
       case ButtonType.warning:
         return AppTheme.warningColor;
+      case ButtonType.outline:
+        return AppTheme.accentColor;
     }
   }
 }

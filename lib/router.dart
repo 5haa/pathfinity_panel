@@ -4,14 +4,16 @@ import 'package:go_router/go_router.dart';
 import 'package:admin_panel/screens/auth/login_screen.dart';
 import 'package:admin_panel/screens/auth/register_screen.dart';
 import 'package:admin_panel/screens/auth/otp_verification_screen.dart';
-import 'package:admin_panel/screens/admin/admin_dashboard.dart';
-import 'package:admin_panel/screens/alumni/alumni_dashboard.dart';
+import 'package:admin_panel/screens/auth/forgot_password_screen.dart';
+import 'package:admin_panel/screens/auth/reset_password_otp_screen.dart';
+import 'package:admin_panel/screens/admin/admin_main_screen.dart';
+import 'package:admin_panel/screens/alumni/alumni_main_screen.dart';
 import 'package:admin_panel/screens/alumni/students_list_screen.dart';
 import 'package:admin_panel/screens/alumni/student_profile_screen.dart';
 import 'package:admin_panel/screens/alumni/conversations_list_screen.dart';
 import 'package:admin_panel/screens/alumni/chat_screen.dart';
-import 'package:admin_panel/screens/company/company_dashboard.dart';
-import 'package:admin_panel/screens/content_creator/content_creator_dashboard.dart';
+import 'package:admin_panel/screens/company/company_main_screen.dart';
+import 'package:admin_panel/screens/content_creator/content_creator_main_screen.dart';
 import 'package:admin_panel/screens/content_creator/course_videos_screen.dart';
 import 'package:admin_panel/screens/content_creator/go_live_screen.dart';
 import 'package:admin_panel/screens/content_creator/broadcast_screen.dart';
@@ -19,6 +21,21 @@ import 'package:admin_panel/screens/content_creator/live_sessions_screen.dart';
 import 'package:admin_panel/models/live_session_model.dart';
 import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/services/auth_service.dart';
+
+// Custom page transition
+class FadeTransitionPage extends CustomTransitionPage<void> {
+  FadeTransitionPage({required LocalKey key, required Widget child})
+    : super(
+        key: key,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+            child: child,
+          );
+        },
+        child: child,
+      );
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final isLoggedIn = ref.watch(isLoggedInProvider);
@@ -34,16 +51,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isVerifyEmailRoute = state.matchedLocation.startsWith(
         '/verify-email',
       );
+      final isForgotPasswordRoute = state.matchedLocation == '/forgot-password';
+      final isResetPasswordOtpRoute = state.matchedLocation.startsWith(
+        '/reset-password-otp',
+      );
 
       debugPrint(
         'Router redirect - Current location: ${state.matchedLocation}, User logged in: $loggedIn',
       );
 
-      // If not logged in and not on login, register, or verify-email page, redirect to login
+      // If not logged in and not on auth pages, redirect to login
       if (!loggedIn &&
           !isLoginRoute &&
           !isRegisterRoute &&
-          !isVerifyEmailRoute) {
+          !isVerifyEmailRoute &&
+          !isForgotPasswordRoute &&
+          !isResetPasswordOtpRoute) {
         debugPrint('Router redirect - Not logged in, redirecting to login');
         return '/login';
       }
@@ -92,77 +115,305 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // Auth routes
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const LoginScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
       GoRoute(
         path: '/register',
-        builder: (context, state) => const RegisterScreen(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const RegisterScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/verify-email',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final email = state.uri.queryParameters['email'] ?? '';
-          return OtpVerificationScreen(email: email);
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: OtpVerificationScreen(email: email),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const ForgotPasswordScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/reset-password-otp',
+        pageBuilder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: ResetPasswordOtpScreen(email: email),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
         },
       ),
 
       // Dashboard routes
       GoRoute(
         path: '/admin',
-        builder: (context, state) => const AdminDashboard(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const AdminMainScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       // Alumni routes
       GoRoute(
         path: '/alumni',
-        builder: (context, state) => const AlumniDashboard(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const AlumniMainScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/alumni/students',
-        builder: (context, state) => const StudentsListScreen(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const StudentsListScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/alumni/student_profile',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final args = state.extra as Map<String, dynamic>;
           final studentId = args['id'] as String;
-          return StudentProfileScreen(studentId: studentId);
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: StudentProfileScreen(studentId: studentId),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
         },
       ),
       GoRoute(
         path: '/alumni/conversations',
-        builder: (context, state) => const ConversationsListScreen(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const ConversationsListScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/alumni/chat',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final args = state.extra as Map<String, dynamic>;
           final conversationId = args['conversationId'] as String;
           final studentName = args['studentName'] as String;
-          return ChatScreen(
-            conversationId: conversationId,
-            studentName: studentName,
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: ChatScreen(
+              conversationId: conversationId,
+              studentName: studentName,
+            ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
           );
         },
       ),
       GoRoute(
         path: '/company',
-        builder: (context, state) => const CompanyDashboard(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const CompanyMainScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/content-creator',
-        builder: (context, state) => const ContentCreatorDashboard(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const ContentCreatorMainScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
 
       // Content Creator Course Videos route
       GoRoute(
         path: '/course/:courseId/videos',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final courseId = state.pathParameters['courseId'] ?? '';
           final extra = state.extra as Map<String, dynamic>?;
           final courseTitle = extra?['courseTitle'] as String? ?? 'Course';
 
-          return CourseVideosScreen(
-            courseId: courseId,
-            courseTitle: courseTitle,
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: CourseVideosScreen(
+              courseId: courseId,
+              courseTitle: courseTitle,
+            ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
           );
         },
       ),
@@ -170,14 +421,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Content Creator Go Live route
       GoRoute(
         path: '/content-creator/go-live',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
           final preselectedCourseId = extra?['courseId'] as String?;
           final preselectedCourseTitle = extra?['courseTitle'] as String?;
 
-          return GoLiveScreen(
-            preselectedCourseId: preselectedCourseId,
-            preselectedCourseTitle: preselectedCourseTitle,
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: GoLiveScreen(
+              preselectedCourseId: preselectedCourseId,
+              preselectedCourseTitle: preselectedCourseTitle,
+            ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
           );
         },
       ),
@@ -185,14 +450,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Content Creator Broadcast route
       GoRoute(
         path: '/content-creator/broadcast/:sessionId',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final sessionId = state.pathParameters['sessionId'] ?? '';
           final extra = state.extra as Map<String, dynamic>?;
           final liveSession = extra?['liveSession'] as LiveSession;
 
-          return BroadcastScreen(
-            sessionId: sessionId,
-            liveSession: liveSession,
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: BroadcastScreen(
+              sessionId: sessionId,
+              liveSession: liveSession,
+            ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
           );
         },
       ),
@@ -200,7 +479,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Content Creator Live Sessions route
       GoRoute(
         path: '/content-creator/live-sessions',
-        builder: (context, state) => const LiveSessionsScreen(),
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const LiveSessionsScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
       ),
     ],
     errorBuilder:
@@ -212,3 +507,62 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
   );
 });
+
+// Helper function to build the pages
+Widget _buildPage(GoRouterState state) {
+  if (state.matchedLocation == '/login') {
+    return const LoginScreen();
+  } else if (state.matchedLocation == '/register') {
+    return const RegisterScreen();
+  } else if (state.matchedLocation.startsWith('/verify-email')) {
+    final email = state.uri.queryParameters['email'] ?? '';
+    return OtpVerificationScreen(email: email);
+  } else if (state.matchedLocation == '/admin') {
+    return const AdminMainScreen();
+  } else if (state.matchedLocation == '/alumni') {
+    return const AlumniMainScreen();
+  } else if (state.matchedLocation == '/alumni/students') {
+    return const StudentsListScreen();
+  } else if (state.matchedLocation == '/alumni/student_profile') {
+    final args = state.extra as Map<String, dynamic>;
+    final studentId = args['id'] as String;
+    return StudentProfileScreen(studentId: studentId);
+  } else if (state.matchedLocation == '/alumni/conversations') {
+    return const ConversationsListScreen();
+  } else if (state.matchedLocation == '/alumni/chat') {
+    final args = state.extra as Map<String, dynamic>;
+    final conversationId = args['conversationId'] as String;
+    final studentName = args['studentName'] as String;
+    return ChatScreen(conversationId: conversationId, studentName: studentName);
+  } else if (state.matchedLocation == '/company') {
+    return const CompanyMainScreen();
+  } else if (state.matchedLocation == '/content-creator') {
+    return const ContentCreatorMainScreen();
+  } else if (state.matchedLocation.startsWith('/course/')) {
+    final courseId = state.pathParameters['courseId'] ?? '';
+    final extra = state.extra as Map<String, dynamic>?;
+    final courseTitle = extra?['courseTitle'] as String? ?? 'Course';
+    return CourseVideosScreen(courseId: courseId, courseTitle: courseTitle);
+  } else if (state.matchedLocation == '/content-creator/go-live') {
+    final extra = state.extra as Map<String, dynamic>?;
+    final preselectedCourseId = extra?['courseId'] as String?;
+    final preselectedCourseTitle = extra?['courseTitle'] as String?;
+    return GoLiveScreen(
+      preselectedCourseId: preselectedCourseId,
+      preselectedCourseTitle: preselectedCourseTitle,
+    );
+  } else if (state.matchedLocation.startsWith('/content-creator/broadcast/')) {
+    final sessionId = state.pathParameters['sessionId'] ?? '';
+    final extra = state.extra as Map<String, dynamic>?;
+    final liveSession = extra?['liveSession'] as LiveSession;
+    return BroadcastScreen(sessionId: sessionId, liveSession: liveSession);
+  } else if (state.matchedLocation == '/content-creator/live-sessions') {
+    return const LiveSessionsScreen();
+  }
+
+  // Error page
+  return Scaffold(
+    appBar: AppBar(title: const Text('Page Not Found')),
+    body: Center(child: Text('No route defined for ${state.matchedLocation}')),
+  );
+}

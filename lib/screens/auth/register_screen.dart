@@ -6,7 +6,14 @@ import 'package:admin_panel/config/theme.dart';
 import 'package:admin_panel/services/auth_service.dart';
 import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
-import 'package:admin_panel/widgets/custom_text_field.dart';
+import 'package:flutter/gestures.dart';
+
+// Import component files
+import 'package:admin_panel/screens/auth/register/user_type_selector.dart';
+import 'package:admin_panel/screens/auth/register/common_fields.dart';
+import 'package:admin_panel/screens/auth/register/alumni_form.dart';
+import 'package:admin_panel/screens/auth/register/company_form.dart';
+import 'package:admin_panel/screens/auth/register/content_creator_form.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -15,7 +22,8 @@ class RegisterScreen extends ConsumerStatefulWidget {
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,13 +37,29 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _experienceController = TextEditingController();
   final _graduationYearController = TextEditingController();
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
   UserType _selectedUserType = UserType.alumni;
   bool _isLoading = false;
   String? _errorMessage;
   DateTime? _selectedDate;
 
   @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+    _animationController.forward();
+  }
+
+  @override
   void dispose() {
+    _animationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -48,6 +72,38 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _experienceController.dispose();
     _graduationYearController.dispose();
     super.dispose();
+  }
+
+  void _selectUserType(UserType userType) {
+    setState(() {
+      _selectedUserType = userType;
+    });
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.accentColor,
+              onPrimary: Colors.white,
+              surface: AppTheme.surfaceColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
   }
 
   Future<void> _register() async {
@@ -88,21 +144,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         'Verification email sent, proceeding to OTP verification screen',
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful! Please verify your email.'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
+      if (!mounted) return;
 
-        // Navigate to OTP verification screen
-        GoRouter.of(context).go(
-          '/verify-email?email=${Uri.encodeComponent(_emailController.text.trim())}',
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration successful! Please verify your email.'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+
+      // Navigate to OTP verification screen
+      GoRouter.of(context).go(
+        '/verify-email?email=${Uri.encodeComponent(_emailController.text.trim())}',
+      );
     } catch (e) {
       debugPrint('Error during registration: $e');
+      if (!mounted) return;
       setState(() {
         if (e is AuthException) {
           _errorMessage = e.message;
@@ -112,11 +169,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         }
       });
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -154,430 +210,210 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isTabletOrLarger = size.width > 600;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Register'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        title: const Text('Create Account'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => GoRouter.of(context).go('/login'),
+        ),
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: Form(
-                    key: _formKey,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header section
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 32.0),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Create an Account',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                        Text(
+                          'Join our platform',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.displayLarge?.copyWith(
                             color: AppTheme.primaryColor,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // User Type Selection
-                        const Text(
-                          'Register as:',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textColor,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        SegmentedButton<UserType>(
-                          segments: const [
-                            ButtonSegment<UserType>(
-                              value: UserType.alumni,
-                              label: Text('Alumni'),
-                              icon: Icon(Icons.school),
-                            ),
-                            ButtonSegment<UserType>(
-                              value: UserType.company,
-                              label: Text('Company'),
-                              icon: Icon(Icons.business),
-                            ),
-                            ButtonSegment<UserType>(
-                              value: UserType.contentCreator,
-                              label: Text('Content Creator'),
-                              icon: Icon(Icons.video_library),
-                            ),
-                          ],
-                          selected: {_selectedUserType},
-                          onSelectionChanged: (Set<UserType> selection) {
-                            setState(() {
-                              _selectedUserType = selection.first;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Common Fields
-                        CustomTextField(
-                          label: 'Email',
-                          hint: 'Enter your email',
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your email';
-                            }
-                            if (!RegExp(
-                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                            ).hasMatch(value)) {
-                              return 'Please enter a valid email';
-                            }
-                            return null;
-                          },
-                          prefixIcon: const Icon(Icons.email_outlined),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // User Type Specific Fields
-                        if (_selectedUserType == UserType.alumni ||
-                            _selectedUserType == UserType.contentCreator) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: CustomTextField(
-                                  label: 'First Name',
-                                  hint: 'Enter your first name',
-                                  controller: _firstNameController,
-                                  textInputAction: TextInputAction.next,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your first name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: CustomTextField(
-                                  label: 'Last Name',
-                                  hint: 'Enter your last name',
-                                  controller: _lastNameController,
-                                  textInputAction: TextInputAction.next,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your last name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        if (_selectedUserType == UserType.alumni) ...[
-                          // Birthdate
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Birthdate',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppTheme.textColor,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectDate(context),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: AppTheme.secondaryColor,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: Colors.white,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today,
-                                        color: AppTheme.secondaryColor,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _selectedDate == null
-                                            ? 'Select your birthdate'
-                                            : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
-                                        style: TextStyle(
-                                          color:
-                                              _selectedDate == null
-                                                  ? Colors.grey
-                                                  : AppTheme.textColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Graduation Year
-                          CustomTextField(
-                            label: 'Graduation Year',
-                            hint: 'Enter your graduation year',
-                            controller: _graduationYearController,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.next,
-                            validator: (value) {
-                              if (value != null && value.isNotEmpty) {
-                                final year = int.tryParse(value);
-                                if (year == null) {
-                                  return 'Please enter a valid year';
-                                }
-                                if (year < 1950 || year > DateTime.now().year) {
-                                  return 'Please enter a valid graduation year';
-                                }
-                              }
-                              return null;
-                            },
-                            prefixIcon: const Icon(Icons.school),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // University
-                          CustomTextField(
-                            label: 'University/College',
-                            hint: 'Enter your university or college name',
-                            controller: _universityController,
-                            textInputAction: TextInputAction.next,
-                            prefixIcon: const Icon(Icons.account_balance),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Experience
-                          CustomTextField(
-                            label: 'Experience',
-                            hint: 'Describe your professional experience',
-                            controller: _experienceController,
-                            maxLines: 3,
-                            keyboardType: TextInputType.multiline,
-                            prefixIcon: const Icon(Icons.work),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        if (_selectedUserType == UserType.company) ...[
-                          CustomTextField(
-                            label: 'Company Name',
-                            hint: 'Enter your company name',
-                            controller: _companyNameController,
-                            textInputAction: TextInputAction.next,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your company name';
-                              }
-                              return null;
-                            },
-                            prefixIcon: const Icon(Icons.business),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        if (_selectedUserType == UserType.contentCreator) ...[
-                          // Birthdate
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Birthdate',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppTheme.textColor,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectDate(context),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: AppTheme.secondaryColor,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: Colors.white,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today,
-                                        color: AppTheme.secondaryColor,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _selectedDate == null
-                                            ? 'Select your birthdate'
-                                            : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
-                                        style: TextStyle(
-                                          color:
-                                              _selectedDate == null
-                                                  ? Colors.grey
-                                                  : AppTheme.textColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Bio
-                          CustomTextField(
-                            label: 'Bio',
-                            hint: 'Tell us about yourself',
-                            controller: _bioController,
-                            maxLines: 3,
-                            keyboardType: TextInputType.multiline,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Phone
-                          CustomTextField(
-                            label: 'Phone',
-                            hint: 'Enter your phone number',
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            prefixIcon: const Icon(Icons.phone),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Password Fields
-                        PasswordTextField(
-                          label: 'Password',
-                          hint: 'Enter your password',
-                          controller: _passwordController,
-                          textInputAction: TextInputAction.next,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            if (value.length < 6) {
-                              return 'Password must be at least 6 characters';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
-                        PasswordTextField(
-                          label: 'Confirm Password',
-                          hint: 'Confirm your password',
-                          controller: _confirmPasswordController,
-                          textInputAction: TextInputAction.done,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please confirm your password';
-                            }
-                            if (value != _passwordController.text) {
-                              return 'Passwords do not match';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 24),
-
-                        if (_errorMessage != null) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.errorColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppTheme.errorColor),
-                            ),
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                color: AppTheme.errorColor,
-                                fontSize: 14,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        CustomButton(
-                          text: 'Register',
-                          onPressed: _register,
-                          isLoading: _isLoading,
-                          isFullWidth: true,
-                          icon: Icons.person_add,
-                        ),
-                        const SizedBox(height: 16),
-
-                        TextButton(
-                          onPressed: () {
-                            GoRouter.of(context).go('/login');
-                          },
-                          child: const Text(
-                            'Already have an account? Login',
-                            style: TextStyle(color: AppTheme.accentColor),
-                          ),
+                        Text(
+                          'Create an account to get started',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: AppTheme.textLightColor),
                         ),
                       ],
                     ),
                   ),
-                ),
+
+                  // Main registration form
+                  Container(
+                    constraints: BoxConstraints(
+                      maxWidth: isTabletOrLarger ? 700 : double.infinity,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    padding: const EdgeInsets.all(32),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // User Type Selection
+                          UserTypeSelector(
+                            selectedUserType: _selectedUserType,
+                            onUserTypeChanged: _selectUserType,
+                          ),
+
+                          const SizedBox(height: 32),
+                          const Divider(),
+                          const SizedBox(height: 32),
+
+                          // Common Fields (Email & Password)
+                          CommonRegistrationFields(
+                            emailController: _emailController,
+                            passwordController: _passwordController,
+                            confirmPasswordController:
+                                _confirmPasswordController,
+                          ),
+
+                          const SizedBox(height: 32),
+                          const Divider(),
+                          const SizedBox(height: 32),
+
+                          // User type specific fields
+                          _buildUserTypeForm(),
+
+                          const SizedBox(height: 32),
+
+                          // Error message
+                          if (_errorMessage != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.errorColor.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppTheme.errorColor.withOpacity(0.5),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: AppTheme.errorColor,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: const TextStyle(
+                                        color: AppTheme.errorColor,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Register button
+                          CustomButton(
+                            text: 'Create Account',
+                            onPressed: _register,
+                            isLoading: _isLoading,
+                            isFullWidth: true,
+                            icon: Icons.person_add,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Login link
+                          Center(
+                            child: RichText(
+                              text: TextSpan(
+                                text: 'Already have an account? ',
+                                style: TextStyle(
+                                  color: AppTheme.textLightColor,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'Log in',
+                                    style: TextStyle(
+                                      color: AppTheme.accentColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    recognizer:
+                                        TapGestureRecognizer()
+                                          ..onTap = () {
+                                            GoRouter.of(context).go('/login');
+                                          },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildUserTypeForm() {
+    switch (_selectedUserType) {
+      case UserType.alumni:
+        return AlumniRegistrationForm(
+          firstNameController: _firstNameController,
+          lastNameController: _lastNameController,
+          universityController: _universityController,
+          graduationYearController: _graduationYearController,
+          experienceController: _experienceController,
+          selectedDate: _selectedDate,
+          onSelectDate: () => _selectDate(context),
+        );
+      case UserType.company:
+        return CompanyRegistrationForm(
+          companyNameController: _companyNameController,
+        );
+      case UserType.contentCreator:
+        return ContentCreatorRegistrationForm(
+          firstNameController: _firstNameController,
+          lastNameController: _lastNameController,
+          phoneController: _phoneController,
+          bioController: _bioController,
+          selectedDate: _selectedDate,
+          onSelectDate: () => _selectDate(context),
+        );
+      default:
+        return const SizedBox();
+    }
   }
 }
