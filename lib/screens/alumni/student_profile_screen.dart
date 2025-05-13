@@ -61,12 +61,14 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
       );
 
       if (conversationId != null && mounted) {
-        GoRouter.of(context).push(
-          '/alumni/chat',
-          extra: {
-            'conversationId': conversationId,
-            'studentName': _student!.fullName,
-          },
+        // Extract the tab parameter from the current route
+        final uri = GoRouterState.of(context).uri;
+        final pathSegments = uri.pathSegments;
+        final tab = pathSegments.length > 1 ? pathSegments[1] : 'students';
+
+        // Navigate to chat screen with the correct path format and student name
+        GoRouter.of(context).go(
+          '/alumni/$tab/chat/$conversationId?studentName=${Uri.encodeComponent(_student!.fullName)}',
         );
       }
     } catch (e) {
@@ -118,7 +120,15 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => GoRouter.of(context).pop(),
+          onPressed: () {
+            // Extract the tab parameter from the current route
+            final uri = GoRouterState.of(context).uri;
+            final pathSegments = uri.pathSegments;
+            final tab = pathSegments.length > 1 ? pathSegments[1] : 'students';
+
+            // Navigate back to the appropriate tab
+            GoRouter.of(context).go('/alumni/$tab');
+          },
         ),
         actions: [
           if (_student != null)

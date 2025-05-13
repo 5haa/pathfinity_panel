@@ -9,6 +9,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
 import 'package:admin_panel/widgets/custom_text_field.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
+import 'package:intl/intl.dart';
 
 final companyServiceProvider = Provider<CompanyService>(
   (ref) => CompanyService(),
@@ -29,18 +30,12 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _companyNameController;
   late TextEditingController _emailController;
-  late TextEditingController _websiteController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _locationController;
 
   @override
   void initState() {
     super.initState();
     _companyNameController = TextEditingController();
     _emailController = TextEditingController();
-    _websiteController = TextEditingController();
-    _descriptionController = TextEditingController();
-    _locationController = TextEditingController();
     _loadCompanyProfile();
   }
 
@@ -48,9 +43,6 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
   void dispose() {
     _companyNameController.dispose();
     _emailController.dispose();
-    _websiteController.dispose();
-    _descriptionController.dispose();
-    _locationController.dispose();
     super.dispose();
   }
 
@@ -60,7 +52,6 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
     });
 
     try {
-      // Use the auth service from the provider
       final userProfile = await ref.read(authServiceProvider).getUserProfile();
 
       if (userProfile is CompanyUser) {
@@ -68,11 +59,6 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
           _companyUser = userProfile;
           _companyNameController.text = userProfile.companyName;
           _emailController.text = userProfile.email;
-
-          // Set default values for fields that might not be in the model
-          _websiteController.text = '';
-          _descriptionController.text = '';
-          _locationController.text = '';
         });
       }
     } catch (e) {
@@ -94,10 +80,13 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
     });
 
     try {
-      // In a real app, you would use a method from the service
-      // For now, we'll simulate a successful update
-      await Future.delayed(const Duration(milliseconds: 500));
-      bool success = true;
+      final companyService = ref.read(companyServiceProvider);
+
+      final success = await companyService.updateProfile(
+        userId: _companyUser!.id,
+        companyName: _companyNameController.text.trim(),
+        email: _emailController.text.trim(),
+      );
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -133,9 +122,37 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
     }
   }
 
+  Future<void> _initiatePasswordReset() async {
+    try {
+      if (_companyUser != null) {
+        // Navigate to the forgot password screen with the email pre-filled
+        GoRouter.of(context).go('/forgot-password');
+
+        // Show a message to the user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Follow the instructions to reset your password'),
+              backgroundColor: AppTheme.infoColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error initiating password reset: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An error occurred. Please try again.'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _signOut() async {
     try {
-      // Use the auth notifier to sign out
       await ref.read(authProvider.notifier).signOut();
 
       if (mounted) {
@@ -161,65 +178,48 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Company Profile',
-                        style: AppTheme.headingStyle,
-                      ),
-                      if (!_isEditing)
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () {
-                            setState(() {
-                              _isEditing = true;
-                            });
-                          },
-                          tooltip: 'Edit Profile',
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  _isEditing ? _buildEditForm() : _buildProfileInfo(),
-                ],
-              ),
-            ),
-          ),
+          _buildProfileCard(),
           const SizedBox(height: 24),
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Account Actions', style: AppTheme.headingStyle),
-                  const SizedBox(height: 24),
-                  CustomButton(
-                    text: 'Sign Out',
-                    onPressed: _signOut,
-                    type: ButtonType.danger,
-                    icon: Icons.logout,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildAccountDetailsCard(),
+          const SizedBox(height: 24),
+          _buildAccountActions(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Company Profile', style: AppTheme.headingStyle),
+                if (!_isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: AppTheme.primaryColor),
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = true;
+                      });
+                    },
+                    tooltip: 'Edit Profile',
+                  ),
+              ],
+            ),
+            const Divider(height: 32),
+            _isEditing ? _buildEditForm() : _buildProfileInfo(),
+          ],
+        ),
       ),
     );
   }
@@ -247,34 +247,40 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
         ),
         _buildInfoRow('Company Name', _companyUser!.companyName),
         _buildInfoRow('Email', _companyUser!.email),
-
-        // Display additional fields if they have values
-        if (_websiteController.text.isNotEmpty)
-          _buildInfoRow('Website', _websiteController.text),
-        if (_locationController.text.isNotEmpty)
-          _buildInfoRow('Location', _locationController.text),
-        if (_descriptionController.text.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const Text('About', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(_descriptionController.text),
-        ],
+        _buildInfoRow(
+          'Account Status',
+          _companyUser!.isApproved ? 'Approved' : 'Pending Approval',
+          icon: _companyUser!.isApproved ? Icons.check_circle : Icons.pending,
+          iconColor:
+              _companyUser!.isApproved
+                  ? AppTheme.successColor
+                  : AppTheme.warningColor,
+        ),
       ],
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(
+    String label,
+    String value, {
+    IconData? icon,
+    Color? iconColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (icon != null) ...[
+            Icon(icon, size: 20, color: iconColor ?? AppTheme.textColor),
+            const SizedBox(width: 8),
+          ],
           SizedBox(
             width: 120,
             child: Text(
               label,
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
                 color: AppTheme.textLightColor,
               ),
             ),
@@ -282,7 +288,11 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 16, color: AppTheme.textColor),
+              style: TextStyle(
+                fontSize: 16,
+                color: iconColor ?? AppTheme.textColor,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -342,27 +352,6 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
-          CustomTextField(
-            label: 'Website',
-            controller: _websiteController,
-            keyboardType: TextInputType.url,
-            hint: 'https://example.com',
-          ),
-          const SizedBox(height: 16),
-          CustomTextField(
-            label: 'Location',
-            controller: _locationController,
-            hint: 'City, Country',
-          ),
-          const SizedBox(height: 16),
-          CustomTextField(
-            label: 'About Your Company',
-            controller: _descriptionController,
-            hint: 'Tell us about your company...',
-            maxLines: 5,
-            keyboardType: TextInputType.multiline,
-          ),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -389,6 +378,99 @@ class _CompanyProfileTabState extends ConsumerState<CompanyProfileTab> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAccountDetailsCard() {
+    if (_companyUser == null) return const SizedBox.shrink();
+
+    final dateFormat = DateFormat('MMM dd, yyyy');
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Account Details', style: AppTheme.subheadingStyle),
+            const Divider(height: 32),
+            _buildInfoRow(
+              'Account Created',
+              dateFormat.format(_companyUser!.createdAt),
+              icon: Icons.calendar_today,
+            ),
+            _buildInfoRow(
+              'Last Updated',
+              dateFormat.format(_companyUser!.updatedAt),
+              icon: Icons.update,
+            ),
+            _buildInfoRow(
+              'Account ID',
+              _companyUser!.id.substring(0, 8),
+              icon: Icons.badge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountActions() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Account Actions', style: AppTheme.subheadingStyle),
+            const Divider(height: 32),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              title: const Text('Reset Password'),
+              subtitle: const Text('Update your account password'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                _initiatePasswordReset();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.logout, color: AppTheme.errorColor),
+              ),
+              title: const Text('Sign Out'),
+              subtitle: const Text('Log out from your account'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _signOut,
+            ),
+          ],
+        ),
       ),
     );
   }

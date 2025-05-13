@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:admin_panel/models/company_model.dart';
+import 'package:admin_panel/models/internship_model.dart';
 
 class CompanyService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -62,6 +63,8 @@ class CompanyService {
     required String description,
     required String duration,
     required List<String> skills,
+    required bool isPaid,
+    String? city,
   }) async {
     try {
       await _supabase.from('internships').insert({
@@ -71,6 +74,8 @@ class CompanyService {
         'duration': duration,
         'skills': skills,
         'is_active': true,
+        'is_paid': isPaid,
+        'city': city,
       });
       return true;
     } catch (e) {
@@ -80,15 +85,13 @@ class CompanyService {
   }
 
   // Get company's internships
-  Future<List<Map<String, dynamic>>> getCompanyInternships(
-    String companyId,
-  ) async {
+  Future<List<Internship>> getCompanyInternships(String companyId) async {
     try {
       final data = await _supabase
           .from('internships')
           .select()
           .eq('company_id', companyId);
-      return List<Map<String, dynamic>>.from(data);
+      return data.map<Internship>((json) => Internship.fromJson(json)).toList();
     } catch (e) {
       debugPrint('Error getting company internships: $e');
       return [];
@@ -108,6 +111,46 @@ class CompanyService {
       return true;
     } catch (e) {
       debugPrint('Error updating internship status: $e');
+      return false;
+    }
+  }
+
+  // Update internship details
+  Future<bool> updateInternship({
+    required String internshipId,
+    required String title,
+    required String description,
+    required String duration,
+    required List<String> skills,
+    required bool isPaid,
+    String? city,
+  }) async {
+    try {
+      await _supabase
+          .from('internships')
+          .update({
+            'title': title,
+            'description': description,
+            'duration': duration,
+            'skills': skills,
+            'is_paid': isPaid,
+            'city': city,
+          })
+          .eq('id', internshipId);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating internship: $e');
+      return false;
+    }
+  }
+
+  // Delete an internship
+  Future<bool> deleteInternship(String internshipId) async {
+    try {
+      await _supabase.from('internships').delete().eq('id', internshipId);
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting internship: $e');
       return false;
     }
   }

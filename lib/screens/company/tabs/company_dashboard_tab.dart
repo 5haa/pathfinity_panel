@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:admin_panel/config/theme.dart';
 import 'package:admin_panel/models/company_model.dart';
+import 'package:admin_panel/models/internship_model.dart';
 import 'package:admin_panel/services/company_service.dart';
 import 'package:admin_panel/services/auth_service.dart';
 import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
+import 'package:admin_panel/widgets/custom_button.dart';
 
 final companyServiceProvider = Provider<CompanyService>(
   (ref) => CompanyService(),
 );
 
 class CompanyDashboardTab extends ConsumerStatefulWidget {
-  const CompanyDashboardTab({Key? key}) : super(key: key);
+  final VoidCallback? onViewAllInternships;
+
+  const CompanyDashboardTab({Key? key, this.onViewAllInternships})
+    : super(key: key);
 
   @override
   ConsumerState<CompanyDashboardTab> createState() =>
@@ -22,6 +27,7 @@ class CompanyDashboardTab extends ConsumerStatefulWidget {
 class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
   CompanyUser? _companyUser;
   bool _isLoading = true;
+  List<Internship> _internships = [];
   List<Map<String, dynamic>> _statistics = [];
 
   @override
@@ -44,6 +50,7 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
           _companyUser = userProfile;
         });
         await _loadStatistics();
+        await _loadInternships();
       }
     } catch (e) {
       debugPrint('Error loading company profile: $e');
@@ -59,37 +66,54 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
 
     try {
       // In a real app, you would use a method from the service
-      // For now, we'll use mock data
+      final companyService = ref.read(companyServiceProvider);
+      final internships = await companyService.getCompanyInternships(
+        _companyUser!.id,
+      );
+
+      int activeInternships = 0;
+
+      for (var internship in internships) {
+        if (internship.isActive == true && internship.isApproved == true) {
+          activeInternships++;
+        }
+      }
+
       setState(() {
         _statistics = [
           {
-            'title': 'Job Postings',
-            'value': '12',
+            'title': 'Active Internships',
+            'value': activeInternships.toString(),
             'icon': Icons.work,
-            'color': Colors.blue,
+            'color': AppTheme.primaryColor,
           },
           {
-            'title': 'Applications',
-            'value': '48',
-            'icon': Icons.person_search,
-            'color': Colors.green,
-          },
-          {
-            'title': 'Interviews',
-            'value': '8',
-            'icon': Icons.people,
-            'color': Colors.orange,
-          },
-          {
-            'title': 'Hires',
-            'value': '3',
-            'icon': Icons.check_circle,
-            'color': Colors.purple,
+            'title': 'Total Internships',
+            'value': internships.length.toString(),
+            'icon': Icons.business_center,
+            'color': AppTheme.infoColor,
           },
         ];
       });
     } catch (e) {
       debugPrint('Error loading statistics: $e');
+    }
+  }
+
+  Future<void> _loadInternships() async {
+    if (_companyUser == null) return;
+
+    try {
+      final companyService = ref.read(companyServiceProvider);
+      final internships = await companyService.getCompanyInternships(
+        _companyUser!.id,
+      );
+
+      setState(() {
+        _internships = internships;
+      });
+    } catch (e) {
+      debugPrint('Error loading internships: $e');
     }
   }
 
@@ -108,32 +132,30 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildProfileHeader(),
+          _buildWelcomeHeader(),
           const SizedBox(height: 24),
           _buildStatisticsGrid(),
           const SizedBox(height: 24),
-          _buildRecentActivity(),
+          _buildApprovalStatusCard(),
+          const SizedBox(height: 24),
+          _buildRecentInternships(),
         ],
       ),
     );
   }
 
-  Widget _buildProfileHeader() {
+  Widget _buildWelcomeHeader() {
     if (_companyUser == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [AppTheme.primaryColor, AppTheme.primaryDarkColor],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Row(
         children: [
@@ -142,37 +164,38 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
             name: _companyUser!.companyName,
             profilePictureUrl: _companyUser!.profilePictureUrl ?? '',
             userType: UserType.company,
-            size: 60,
+            size: 70,
             onPictureUpdated: (url) {
               setState(() {
                 _companyUser = _companyUser!.copyWith(profilePictureUrl: url);
               });
             },
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                  'Welcome,',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white70,
+                  ),
+                ),
                 Text(
                   _companyUser!.companyName,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
+                const SizedBox(height: 5),
                 Text(
                   _companyUser!.email,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                // Display company type or other info if available
-                Text(
-                  'Company',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.white70),
                 ),
               ],
             ),
@@ -212,37 +235,41 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
     required Color color,
   }) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        padding: const EdgeInsets.all(12),
+        child: Row(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textLightColor,
+            Icon(icon, color: color, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Icon(icon, color: color, size: 24),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textLightColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
@@ -251,39 +278,52 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
     );
   }
 
-  Widget _buildRecentActivity() {
+  Widget _buildApprovalStatusCard() {
+    final isApproved = _companyUser!.isApproved;
+
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Recent Activity', style: AppTheme.subheadingStyle),
+            const Text('Account Status', style: AppTheme.subheadingStyle),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color:
+                        isApproved
+                            ? AppTheme.successColor
+                            : AppTheme.warningColor,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isApproved ? 'Approved' : 'Pending Approval',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        isApproved
+                            ? AppTheme.successColor
+                            : AppTheme.warningColor,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
-            _buildActivityItem(
-              title: 'New Application',
-              description: 'John Doe applied for Software Engineer position',
-              time: '2 hours ago',
-              icon: Icons.person_add,
-              color: Colors.blue,
-            ),
-            const Divider(),
-            _buildActivityItem(
-              title: 'Interview Scheduled',
-              description: 'Interview with Jane Smith for UX Designer position',
-              time: '1 day ago',
-              icon: Icons.event,
-              color: Colors.orange,
-            ),
-            const Divider(),
-            _buildActivityItem(
-              title: 'Job Posting Updated',
-              description: 'Marketing Manager position requirements updated',
-              time: '3 days ago',
-              icon: Icons.edit,
-              color: Colors.green,
+            Text(
+              isApproved
+                  ? 'Your account has been approved. You can now post internships.'
+                  : 'Your account is pending approval by an administrator. You cannot post internships until your account is approved.',
+              style: const TextStyle(color: AppTheme.textLightColor),
             ),
           ],
         ),
@@ -291,55 +331,217 @@ class _CompanyDashboardTabState extends ConsumerState<CompanyDashboardTab> {
     );
   }
 
-  Widget _buildActivityItem({
-    required String title,
-    required String description,
-    required String time,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
+  Widget _buildRecentInternships() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Recent Internships', style: AppTheme.subheadingStyle),
+            if (_internships.isNotEmpty)
+              TextButton(
+                onPressed: widget.onViewAllInternships,
+                child: const Text('View All'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (!_companyUser!.isApproved)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text(
+              'Your account needs to be approved before you can post internships.',
+              style: TextStyle(
+                color: AppTheme.warningColor,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+        if (_internships.isEmpty && _companyUser!.isApproved)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.work_off_outlined,
+                    size: 64,
+                    color: AppTheme.textLightColor,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No internships posted yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Create your first internship to get started',
+                    style: TextStyle(color: AppTheme.textLightColor),
+                  ),
+                  const SizedBox(height: 24),
+                  CustomButton(
+                    text: 'Create Internship',
+                    onPressed:
+                        widget.onViewAllInternships != null
+                            ? widget.onViewAllInternships!
+                            : () {},
+                    icon: Icons.add,
+                    type: ButtonType.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ..._internships.take(3).map(_buildInternshipCard).toList(),
+        if (_internships.length > 3)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: TextButton.icon(
+                onPressed: widget.onViewAllInternships,
+                icon: const Icon(Icons.visibility),
+                label: const Text('View All Internships'),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildInternshipCard(Internship internship) {
+    final bool isActive = internship.isActive;
+    final bool isApproved = internship.isApproved ?? false;
+    final List<String> skills = internship.skills;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                Expanded(
+                  child: Text(
+                    internship.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textColor,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    color: AppTheme.textLightColor,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  time,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
+                const SizedBox(width: 12),
+                _buildStatusIndicator(isApproved, isActive),
               ],
             ),
-          ),
-        ],
+            const Divider(height: 24),
+            Text(
+              internship.description,
+              style: const TextStyle(color: AppTheme.textColor),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (skills.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children:
+                    skills
+                        .take(3)
+                        .map((skill) => _buildSkillChip(skill))
+                        .toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusIndicator(bool isApproved, bool isActive) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isApproved ? 'Status: Approved' : 'Status: Pending',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color:
+                    isApproved ? AppTheme.successColor : AppTheme.warningColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color:
+                    isApproved ? AppTheme.successColor : AppTheme.warningColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isActive ? 'Availability: Active' : 'Availability: Inactive',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isActive ? AppTheme.infoColor : AppTheme.textLightColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive ? AppTheme.infoColor : AppTheme.textLightColor,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkillChip(String skill) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+      ),
+      child: Text(
+        skill,
+        style: TextStyle(
+          fontSize: 12,
+          color: AppTheme.primaryColor.withOpacity(0.8),
+        ),
       ),
     );
   }

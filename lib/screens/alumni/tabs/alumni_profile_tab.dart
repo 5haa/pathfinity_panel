@@ -9,6 +9,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
 import 'package:admin_panel/widgets/custom_text_field.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
+import 'package:intl/intl.dart';
 
 final alumniServiceProvider = Provider<AlumniService>((ref) => AlumniService());
 
@@ -23,6 +24,7 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
   AlumniUser? _alumniUser;
   bool _isLoading = true;
   bool _isEditing = false;
+  bool _isSaving = false;
 
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _firstNameController;
@@ -68,14 +70,7 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
       if (userProfile is AlumniUser) {
         setState(() {
           _alumniUser = userProfile;
-          _firstNameController.text = userProfile.firstName;
-          _lastNameController.text = userProfile.lastName ?? '';
-          _emailController.text = userProfile.email;
-          _universityController.text = userProfile.university ?? '';
-          _graduationYearController.text =
-              userProfile.graduationYear?.toString() ?? '';
-          _experienceController.text = userProfile.experience ?? '';
-          _selectedBirthdate = userProfile.birthdate;
+          _updateControllers();
         });
       }
     } catch (e) {
@@ -87,30 +82,62 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
     }
   }
 
-  Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) {
+  void _updateControllers() {
+    if (_alumniUser == null) return;
+
+    _firstNameController.text = _alumniUser!.firstName;
+    _lastNameController.text = _alumniUser!.lastName;
+    _emailController.text = _alumniUser!.email;
+    _universityController.text = _alumniUser!.university ?? '';
+    _graduationYearController.text =
+        _alumniUser!.graduationYear?.toString() ?? '';
+    _experienceController.text = _alumniUser!.experience ?? '';
+    _selectedBirthdate = _alumniUser!.birthdate;
+  }
+
+  Future<void> _saveProfile() async {
+    if (_formKey.currentState?.validate() != true || _alumniUser == null) {
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _isSaving = true;
     });
 
     try {
-      // In a real app, you would use a method from the service
-      // For now, we'll simulate a successful update
-      await Future.delayed(const Duration(milliseconds: 500));
-      bool success = true;
+      int? graduationYear;
+      if (_graduationYearController.text.isNotEmpty) {
+        graduationYear = int.tryParse(_graduationYearController.text);
+      }
 
-      if (success && mounted) {
+      final success = await ref
+          .read(alumniServiceProvider)
+          .updateProfile(
+            userId: _alumniUser!.id,
+            firstName: _firstNameController.text,
+            lastName: _lastNameController.text,
+            email: _emailController.text,
+            birthdate: _selectedBirthdate,
+            graduationYear: graduationYear,
+            university:
+                _universityController.text.isNotEmpty
+                    ? _universityController.text
+                    : null,
+            experience:
+                _experienceController.text.isNotEmpty
+                    ? _experienceController.text
+                    : null,
+          );
+
+      if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile updated successfully'),
             backgroundColor: AppTheme.successColor,
           ),
         );
-        _loadAlumniProfile();
-      } else if (mounted) {
+        await _loadAlumniProfile();
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to update profile'),
@@ -119,48 +146,76 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
         );
       }
     } catch (e) {
-      debugPrint('Error updating profile: $e');
-      if (mounted) {
+      debugPrint('Error saving profile: $e');
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('An error occurred while updating profile'),
+          SnackBar(
+            content: Text('Error: $e'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
       }
     } finally {
       setState(() {
-        _isLoading = false;
         _isEditing = false;
+        _isSaving = false;
       });
     }
   }
 
-  Future<void> _signOut() async {
-    try {
-      // Use the auth notifier to sign out
-      await ref.read(authProvider.notifier).signOut();
-
-      if (mounted) {
-        GoRouter.of(context).go('/login');
-      }
-    } catch (e) {
-      debugPrint('Error signing out: $e');
-    }
-  }
-
-  Future<void> _selectBirthdate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _pickBirthdate() async {
+    final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _selectedBirthdate ?? DateTime.now(),
       firstDate: DateTime(1950),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.textColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
-    if (picked != null && mounted) {
+    if (pickedDate != null) {
       setState(() {
-        _selectedBirthdate = picked;
+        _selectedBirthdate = pickedDate;
       });
+    }
+  }
+
+  Future<void> _initiatePasswordReset() async {
+    try {
+      if (_alumniUser != null) {
+        // Navigate to the forgot password screen with the email pre-filled
+        GoRouter.of(context).go('/forgot-password');
+
+        // Show a message to the user
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Follow the instructions to reset your password'),
+              backgroundColor: AppTheme.infoColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error initiating password reset: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An error occurred. Please try again.'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
   }
 
@@ -174,70 +229,56 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
       return const Center(child: Text('Error loading alumni profile'));
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Profile Information',
-                        style: AppTheme.headingStyle,
-                      ),
-                      if (!_isEditing)
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () {
-                            setState(() {
-                              _isEditing = true;
-                            });
-                          },
-                          tooltip: 'Edit Profile',
-                        ),
-                    ],
+    return RefreshIndicator(
+      onRefresh: _loadAlumniProfile,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildProfileCard(),
+            const SizedBox(height: 24),
+            _buildAccountDetailsCard(),
+            const SizedBox(height: 24),
+            _buildAccountActions(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Alumni Profile', style: AppTheme.headingStyle),
+                if (!_isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: AppTheme.primaryColor),
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = true;
+                      });
+                    },
+                    tooltip: 'Edit Profile',
                   ),
-                  const SizedBox(height: 24),
-                  _isEditing ? _buildEditForm() : _buildProfileInfo(),
-                ],
-              ),
+              ],
             ),
-          ),
-          const SizedBox(height: 24),
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Account Actions', style: AppTheme.headingStyle),
-                  const SizedBox(height: 24),
-                  CustomButton(
-                    text: 'Sign Out',
-                    onPressed: _signOut,
-                    type: ButtonType.danger,
-                    icon: Icons.logout,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+            const Divider(height: 32),
+            _isEditing ? _buildEditForm() : _buildProfileInfo(),
+          ],
+        ),
       ),
     );
   }
@@ -251,7 +292,7 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
             padding: const EdgeInsets.only(bottom: 24),
             child: ProfilePictureWidget(
               userId: _alumniUser!.id,
-              name: '${_alumniUser!.firstName} ${_alumniUser!.lastName ?? ''}',
+              name: '${_alumniUser!.firstName} ${_alumniUser!.lastName}',
               profilePictureUrl: _alumniUser!.profilePictureUrl ?? '',
               userType: UserType.alumni,
               size: 120,
@@ -264,7 +305,7 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
           ),
         ),
         _buildInfoRow('First Name', _alumniUser!.firstName),
-        _buildInfoRow('Last Name', _alumniUser!.lastName ?? ''),
+        _buildInfoRow('Last Name', _alumniUser!.lastName),
         _buildInfoRow('Email', _alumniUser!.email),
         if (_alumniUser!.birthdate != null)
           _buildInfoRow(
@@ -280,31 +321,42 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
             _alumniUser!.graduationYear.toString(),
           ),
         if (_alumniUser!.experience != null &&
-            _alumniUser!.experience!.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const Text(
-            'Experience',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(_alumniUser!.experience!),
-        ],
+            _alumniUser!.experience!.isNotEmpty)
+          _buildInfoRow('Experience', _alumniUser!.experience!),
+        _buildInfoRow(
+          'Account Status',
+          _alumniUser!.isApproved ? 'Approved' : 'Pending Approval',
+          icon: _alumniUser!.isApproved ? Icons.check_circle : Icons.pending,
+          iconColor:
+              _alumniUser!.isApproved
+                  ? AppTheme.successColor
+                  : AppTheme.warningColor,
+        ),
       ],
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(
+    String label,
+    String value, {
+    IconData? icon,
+    Color? iconColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (icon != null) ...[
+            Icon(icon, size: 20, color: iconColor ?? AppTheme.textColor),
+            const SizedBox(width: 8),
+          ],
           SizedBox(
             width: 120,
             child: Text(
               label,
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
                 color: AppTheme.textLightColor,
               ),
             ),
@@ -312,7 +364,11 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 16, color: AppTheme.textColor),
+              style: TextStyle(
+                fontSize: 16,
+                color: iconColor ?? AppTheme.textColor,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -331,8 +387,7 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
               padding: const EdgeInsets.only(bottom: 24),
               child: ProfilePictureWidget(
                 userId: _alumniUser!.id,
-                name:
-                    '${_alumniUser!.firstName} ${_alumniUser!.lastName ?? ''}',
+                name: '${_alumniUser!.firstName} ${_alumniUser!.lastName}',
                 profilePictureUrl: _alumniUser!.profilePictureUrl ?? '',
                 userType: UserType.alumni,
                 size: 120,
@@ -383,57 +438,13 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
             },
           ),
           const SizedBox(height: 16),
-          // Birthdate field
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Birthdate',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textColor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _selectBirthdate(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.secondaryColor),
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today,
-                        color: AppTheme.secondaryColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _selectedBirthdate == null
-                            ? 'Select your birthdate'
-                            : '${_selectedBirthdate!.day}/${_selectedBirthdate!.month}/${_selectedBirthdate!.year}',
-                        style: TextStyle(
-                          color:
-                              _selectedBirthdate == null
-                                  ? Colors.grey
-                                  : AppTheme.textColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          _buildBirthdatePicker(),
+          const SizedBox(height: 16),
+          CustomTextField(
+            label: 'University',
+            controller: _universityController,
           ),
           const SizedBox(height: 16),
-          // Graduation Year
           CustomTextField(
             label: 'Graduation Year',
             controller: _graduationYearController,
@@ -444,28 +455,18 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
                 if (year == null) {
                   return 'Please enter a valid year';
                 }
-                if (year < 1950 || year > DateTime.now().year) {
-                  return 'Please enter a valid graduation year';
+                if (year < 1950 || year > DateTime.now().year + 10) {
+                  return 'Please enter a reasonable graduation year';
                 }
               }
               return null;
             },
           ),
           const SizedBox(height: 16),
-          // University
-          CustomTextField(
-            label: 'University/College',
-            controller: _universityController,
-            hint: 'Enter your university or college name',
-          ),
-          const SizedBox(height: 16),
-          // Experience
           CustomTextField(
             label: 'Experience',
             controller: _experienceController,
-            hint: 'Enter your skills or experience',
-            maxLines: 3,
-            keyboardType: TextInputType.multiline,
+            maxLines: 4,
           ),
           const SizedBox(height: 24),
           Row(
@@ -476,24 +477,16 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
                 onPressed: () {
                   setState(() {
                     _isEditing = false;
-                    // Reset controllers to original values
-                    _firstNameController.text = _alumniUser!.firstName;
-                    _lastNameController.text = _alumniUser!.lastName ?? '';
-                    _emailController.text = _alumniUser!.email;
-                    _universityController.text = _alumniUser!.university ?? '';
-                    _graduationYearController.text =
-                        _alumniUser!.graduationYear?.toString() ?? '';
-                    _experienceController.text = _alumniUser!.experience ?? '';
-                    _selectedBirthdate = _alumniUser!.birthdate;
+                    _updateControllers(); // Reset form to original values
                   });
                 },
                 type: ButtonType.secondary,
               ),
               const SizedBox(width: 16),
               CustomButton(
-                text: 'Save',
-                onPressed: _updateProfile,
-                isLoading: _isLoading,
+                text: _isSaving ? 'Saving...' : 'Save',
+                onPressed: _saveButtonPressed,
+                isLoading: _isSaving,
                 type: ButtonType.primary,
               ),
             ],
@@ -501,5 +494,154 @@ class _AlumniProfileTabState extends ConsumerState<AlumniProfileTab> {
         ],
       ),
     );
+  }
+
+  Widget _buildBirthdatePicker() {
+    return InkWell(
+      onTap: _pickBirthdate,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Birthdate',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _selectedBirthdate != null
+                  ? '${_selectedBirthdate!.day}/${_selectedBirthdate!.month}/${_selectedBirthdate!.year}'
+                  : 'Select Birthdate',
+              style: TextStyle(
+                color:
+                    _selectedBirthdate != null
+                        ? AppTheme.textColor
+                        : Colors.grey[600],
+              ),
+            ),
+            const Icon(Icons.calendar_today_outlined, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountDetailsCard() {
+    if (_alumniUser == null) return const SizedBox.shrink();
+
+    final dateFormat = DateFormat('MMM dd, yyyy');
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Account Details', style: AppTheme.subheadingStyle),
+            const Divider(height: 32),
+            _buildInfoRow(
+              'Account Created',
+              dateFormat.format(_alumniUser!.createdAt),
+              icon: Icons.calendar_today,
+            ),
+            _buildInfoRow(
+              'Last Updated',
+              dateFormat.format(_alumniUser!.updatedAt),
+              icon: Icons.update,
+            ),
+            _buildInfoRow(
+              'Account ID',
+              _alumniUser!.id.substring(0, 8),
+              icon: Icons.badge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountActions() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Account Actions', style: AppTheme.subheadingStyle),
+            const Divider(height: 32),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              title: const Text('Reset Password'),
+              subtitle: const Text('Update your account password'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                _initiatePasswordReset();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.logout, color: AppTheme.errorColor),
+              ),
+              title: const Text('Sign Out'),
+              subtitle: const Text('Log out from your account'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                try {
+                  await ref.read(authProvider.notifier).signOut();
+                  if (context.mounted) {
+                    GoRouter.of(context).go('/login');
+                  }
+                } catch (e) {
+                  debugPrint('Error signing out: $e');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error signing out: $e'),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _saveButtonPressed() {
+    if (!_isSaving) {
+      _saveProfile();
+    }
   }
 }

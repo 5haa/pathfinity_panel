@@ -1,49 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/bottom_nav_scaffold.dart';
 import 'package:admin_panel/screens/company/tabs/company_dashboard_tab.dart';
 import 'package:admin_panel/screens/company/tabs/company_jobs_tab.dart';
 import 'package:admin_panel/screens/company/tabs/company_profile_tab.dart';
+import 'package:admin_panel/config/theme.dart';
+
+// Custom controller to provide tab navigation across the bottom nav bar
+final currentTabIndexProvider = StateProvider<int>((ref) => 0);
 
 class CompanyMainScreen extends ConsumerWidget {
   const CompanyMainScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentTabIndex = ref.watch(currentTabIndexProvider);
+
     return BottomNavScaffold(
       title: 'Company Dashboard',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.logout),
-          onPressed: () async {
-            try {
-              await ref.read(authProvider.notifier).signOut();
-              if (context.mounted) {
-                GoRouter.of(context).go('/login');
-              }
-            } catch (e) {
-              debugPrint('Error signing out: $e');
-            }
-          },
-          tooltip: 'Sign Out',
-        ),
-      ],
+      initialIndex: currentTabIndex,
+      onTabChanged: (index) {
+        ref.read(currentTabIndexProvider.notifier).state = index;
+      },
       items: [
         BottomNavItem(
           label: 'Dashboard',
-          icon: Icons.dashboard,
-          screen: const CompanyDashboardTab(),
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/dashboard.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
+          screen: CompanyDashboardTab(
+            onViewAllInternships: () {
+              // Navigate to internships tab
+              ref.read(currentTabIndexProvider.notifier).state = 1;
+            },
+          ),
         ),
         BottomNavItem(
-          label: 'Jobs',
-          icon: Icons.work,
+          label: 'Internships',
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/internships.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const CompanyJobsTab(),
         ),
         BottomNavItem(
           label: 'Profile',
-          icon: Icons.business,
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/profile.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const CompanyProfileTab(),
         ),
       ],

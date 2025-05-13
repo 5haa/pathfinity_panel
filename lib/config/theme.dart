@@ -3,34 +3,30 @@ import 'package:flutter/services.dart';
 
 class AppTheme {
   // Primary color palette
-  static const Color primaryColor = Color(0xFF1E293B); // Deep slate blue
-  static const Color primaryLightColor = Color(
-    0xFF334155,
-  ); // Lighter slate blue
-  static const Color primaryDarkColor = Color(0xFF0F172A); // Darker slate blue
-  static const Color secondaryColor = Color(0xFF64748B); // Slate gray
+  static const Color primaryColor = Color(0xFF1E40AF); // Deeper blue
+  static const Color primaryLightColor = Color(0xFF3B82F6); // Lighter blue
+  static const Color primaryDarkColor = Color(0xFF1E3A8A); // Darker blue
+  static const Color secondaryColor = Color(0xFF475569); // Slate gray
 
   // Accent colors
-  static const Color accentColor = Color(0xFF3B82F6); // Bright blue
+  static const Color accentColor = Color(0xFF3B82F6); // Blue (matching primary)
   static const Color accentLightColor = Color(0xFF60A5FA); // Lighter blue
   static const Color accentDarkColor = Color(0xFF2563EB); // Darker blue
 
   // Background colors
-  static const Color backgroundColor = Color(0xFFF8FAFC); // Very light slate
+  static const Color backgroundColor = Color(0xFFF8FAFC); // Light gray-blue
   static const Color surfaceColor = Colors.white; // Pure white
   static const Color cardColor = Colors.white; // Card color
 
   // Status colors
-  static const Color errorColor = Color(0xFFEF4444); // Red
-  static const Color successColor = Color(0xFF10B981); // Emerald green
-  static const Color warningColor = Color(0xFFF59E0B); // Amber
-  static const Color infoColor = Color(0xFF0EA5E9); // Sky blue
+  static const Color errorColor = Color(0xFFDC2626); // Red
+  static const Color successColor = Color(0xFF059669); // Emerald green
+  static const Color warningColor = Color(0xFFD97706); // Amber
+  static const Color infoColor = Color(0xFF0284C7); // Sky blue
 
   // Text colors
-  static const Color textColor = Color(0xFF1E293B); // Dark slate for text
-  static const Color textLightColor = Color(
-    0xFF64748B,
-  ); // Light slate for secondary text
+  static const Color textColor = Color(0xFF0F172A); // Slate 900
+  static const Color textLightColor = Color(0xFF64748B); // Slate 500
   static const Color textInverseColor =
       Colors.white; // White text for dark backgrounds
 
@@ -38,7 +34,8 @@ class AppTheme {
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
       color: const Color(0xFF1E293B).withOpacity(0.08),
-      blurRadius: 10,
+      blurRadius: 12,
+      spreadRadius: 1,
       offset: const Offset(0, 4),
     ),
   ];
@@ -58,7 +55,7 @@ class AppTheme {
 
   // Text Styles
   static const TextStyle headingStyle = TextStyle(
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: FontWeight.w700,
     color: textColor,
     letterSpacing: -0.5,
@@ -108,22 +105,28 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+        shadowColor: const Color(0xFF1E293B).withOpacity(0.08),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: surfaceColor,
-        foregroundColor: textColor,
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+        centerTitle: false,
+        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
           statusBarColor: Colors.transparent,
         ),
-        titleTextStyle: subheadingStyle,
+        titleTextStyle: subheadingStyle.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accentColor,
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           elevation: 2,
+          shadowColor: primaryColor.withOpacity(0.3),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -133,8 +136,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: accentColor,
-          side: const BorderSide(color: accentColor, width: 1.5),
+          foregroundColor: primaryColor,
+          side: const BorderSide(color: primaryColor, width: 1.5),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -144,7 +147,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: accentColor,
+          foregroundColor: primaryColor,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: buttonTextStyle.copyWith(fontSize: 14),
@@ -173,7 +176,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: accentColor, width: 2),
+          borderSide: const BorderSide(color: primaryColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -190,7 +193,7 @@ class AppTheme {
         ),
         labelStyle: const TextStyle(color: textLightColor, fontSize: 16),
         floatingLabelStyle: const TextStyle(
-          color: accentColor,
+          color: primaryColor,
           fontSize: 18,
           fontWeight: FontWeight.w500,
         ),
@@ -199,22 +202,22 @@ class AppTheme {
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.selected)) return accentColor;
+          if (states.contains(MaterialState.selected)) return primaryColor;
           return Colors.white;
         }),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       radioTheme: RadioThemeData(
-        fillColor: MaterialStateProperty.all(accentColor),
+        fillColor: MaterialStateProperty.all(primaryColor),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.selected)) return accentColor;
+          if (states.contains(MaterialState.selected)) return primaryColor;
           return Colors.white;
         }),
         trackColor: MaterialStateProperty.resolveWith<Color>((states) {
           if (states.contains(MaterialState.selected))
-            return accentColor.withOpacity(0.5);
+            return primaryColor.withOpacity(0.5);
           return secondaryColor.withOpacity(0.3);
         }),
       ),
@@ -228,6 +231,12 @@ class AppTheme {
         displayMedium: subheadingStyle,
         bodyLarge: bodyStyle,
         bodyMedium: captionStyle,
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: accentColor,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

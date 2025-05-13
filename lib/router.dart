@@ -8,9 +8,7 @@ import 'package:admin_panel/screens/auth/forgot_password_screen.dart';
 import 'package:admin_panel/screens/auth/reset_password_otp_screen.dart';
 import 'package:admin_panel/screens/admin/admin_main_screen.dart';
 import 'package:admin_panel/screens/alumni/alumni_main_screen.dart';
-import 'package:admin_panel/screens/alumni/students_list_screen.dart';
 import 'package:admin_panel/screens/alumni/student_profile_screen.dart';
-import 'package:admin_panel/screens/alumni/conversations_list_screen.dart';
 import 'package:admin_panel/screens/alumni/chat_screen.dart';
 import 'package:admin_panel/screens/company/company_main_screen.dart';
 import 'package:admin_panel/screens/content_creator/content_creator_main_screen.dart';
@@ -92,7 +90,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             return '/admin';
           case UserType.alumni:
             debugPrint('Router redirect - Redirecting to alumni dashboard');
-            return '/alumni';
+            return '/alumni/chat';
           case UserType.company:
             debugPrint('Router redirect - Redirecting to company dashboard');
             return '/company';
@@ -240,12 +238,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       // Alumni routes
+      GoRoute(path: '/alumni', redirect: (context, state) => '/alumni/chat'),
       GoRoute(
-        path: '/alumni',
+        path: '/alumni/chat',
         pageBuilder: (context, state) {
           return CustomTransitionPage(
             key: state.pageKey,
-            child: const AlumniMainScreen(),
+            child: const AlumniMainScreen(tabParam: 'chat'),
             transitionsBuilder: (
               context,
               animation,
@@ -265,7 +264,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) {
           return CustomTransitionPage(
             key: state.pageKey,
-            child: const StudentsListScreen(),
+            child: const AlumniMainScreen(tabParam: 'students'),
             transitionsBuilder: (
               context,
               animation,
@@ -281,33 +280,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/alumni/student_profile',
-        pageBuilder: (context, state) {
-          final args = state.extra as Map<String, dynamic>;
-          final studentId = args['id'] as String;
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: StudentProfileScreen(studentId: studentId),
-            transitionsBuilder: (
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            ) {
-              return FadeTransition(
-                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
-                child: child,
-              );
-            },
-          );
-        },
-      ),
-      GoRoute(
-        path: '/alumni/conversations',
+        path: '/alumni/profile',
         pageBuilder: (context, state) {
           return CustomTransitionPage(
             key: state.pageKey,
-            child: const ConversationsListScreen(),
+            child: const AlumniMainScreen(tabParam: 'profile'),
             transitionsBuilder: (
               context,
               animation,
@@ -323,17 +300,39 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/alumni/chat',
+        path: '/alumni/:tab/chat/:conversationId',
         pageBuilder: (context, state) {
-          final args = state.extra as Map<String, dynamic>;
-          final conversationId = args['conversationId'] as String;
-          final studentName = args['studentName'] as String;
+          final conversationId = state.pathParameters['conversationId'];
+          final studentName =
+              state.uri.queryParameters['studentName'] ?? 'Student';
+
           return CustomTransitionPage(
             key: state.pageKey,
             child: ChatScreen(
-              conversationId: conversationId,
+              conversationId: conversationId!,
               studentName: studentName,
             ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/alumni/:tab/student_profile/:studentId',
+        pageBuilder: (context, state) {
+          final studentId = state.pathParameters['studentId'];
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: StudentProfileScreen(studentId: studentId!),
             transitionsBuilder: (
               context,
               animation,
@@ -521,14 +520,10 @@ Widget _buildPage(GoRouterState state) {
     return const AdminMainScreen();
   } else if (state.matchedLocation == '/alumni') {
     return const AlumniMainScreen();
-  } else if (state.matchedLocation == '/alumni/students') {
-    return const StudentsListScreen();
   } else if (state.matchedLocation == '/alumni/student_profile') {
     final args = state.extra as Map<String, dynamic>;
     final studentId = args['id'] as String;
     return StudentProfileScreen(studentId: studentId);
-  } else if (state.matchedLocation == '/alumni/conversations') {
-    return const ConversationsListScreen();
   } else if (state.matchedLocation == '/alumni/chat') {
     final args = state.extra as Map<String, dynamic>;
     final conversationId = args['conversationId'] as String;
