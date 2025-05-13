@@ -2,29 +2,28 @@
 
 -- Gift Cards Table
 CREATE TABLE gift_cards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code TEXT NOT NULL UNIQUE,
-    is_used BOOLEAN DEFAULT FALSE,
-    used_at TIMESTAMP WITH TIME ZONE,
-    used_by UUID REFERENCES auth.users(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    created_by UUID NOT NULL REFERENCES user_admins(id),
-    expires_at TIMESTAMP WITH TIME ZONE,
-    notes TEXT
+  code TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  redeemed_at TIMESTAMP WITH TIME ZONE NULL,
+  redeemed_by UUID NULL,
+  days INTEGER NOT NULL DEFAULT 365,
+  serial BIGSERIAL NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  metadata TEXT NOT NULL DEFAULT ''::TEXT,
+  generated_by UUID NULL,
+  CONSTRAINT gift_cards_pkey PRIMARY KEY (code),
+  CONSTRAINT gift_cards_serial_key UNIQUE (serial),
+  CONSTRAINT gift_cards_generated_by_fkey FOREIGN KEY (generated_by) REFERENCES user_admins (id),
+  CONSTRAINT gift_cards_redeemed_by_fkey FOREIGN KEY (redeemed_by) REFERENCES user_students (id) ON DELETE CASCADE,
+  CONSTRAINT check_column_format CHECK (
+    (
+      (length(code) = 16)
+      AND (code ~ '^[0-9A-Z]{16}$'::TEXT)
+    )
+  )
 );
 
--- RLS Policies for gift_cards table
-CREATE POLICY "Allow admins full access to gift cards" ON gift_cards
-    FOR ALL
-    TO authenticated
-    USING (EXISTS (SELECT 1 FROM user_admins WHERE user_admins.id = auth.uid()))
-    WITH CHECK (EXISTS (SELECT 1 FROM user_admins WHERE user_admins.id = auth.uid()));
-
-CREATE POLICY "Allow users to view and use their own gift cards" ON gift_cards
-    FOR SELECT
-    TO authenticated
-    USING (used_by = auth.uid() OR is_used = FALSE);
+CREATE INDEX IF NOT EXISTS gift_cards_updated_at_idx ON gift_cards USING btree (updated_at);
 
 -- Function to generate a unique gift card code
 CREATE OR REPLACE FUNCTION generate_gift_card_code()
@@ -53,18 +52,21 @@ BEGIN
 END;
 $$;
 
--- Function to create a new gift card
-CREATE OR REPLACE FUNCTION create_gift_card(
-    p_expires_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-    p_notes TEXT DEFAULT NULL
+-- Function to create new gift cards
+CREATE OR REPLACE FUNCTION generate_gift_cards(
+    p_days INTEGER DEFAULT 365,
+    p_metadata TEXT DEFAULT '',
+    p_quantity INTEGER DEFAULT 1
 )
-RETURNS UUID
+RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     v_admin_id UUID;
-    v_gift_card_id UUID;
+    v_codes TEXT DEFAULT '';
+    v_code TEXT;
+    i INTEGER;
 BEGIN
     -- Check if the user is an admin
     SELECT id INTO v_admin_id FROM user_admins WHERE id = auth.uid();
@@ -73,20 +75,36 @@ BEGIN
         RAISE EXCEPTION 'Only admins can create gift cards';
     END IF;
     
-    -- Insert new gift card
-    INSERT INTO gift_cards (
-        code,
-        created_by,
-        expires_at,
-        notes
-    ) VALUES (
-        generate_gift_card_code(),
-        v_admin_id,
-        p_expires_at,
-        p_notes
-    ) RETURNING id INTO v_gift_card_id;
+    -- Create multiple gift cards if quantity > 1
+    FOR i IN 1..p_quantity LOOP
+        -- Generate a unique code
+        v_code := generate_gift_card_code();
+        
+        -- Insert new gift card
+        INSERT INTO gift_cards (
+            code,
+            days,
+            metadata,
+            generated_by
+        ) VALUES (
+            v_code,
+            p_days,
+            p_metadata,
+            v_admin_id
+        );
+        
+        -- Append code to result
+        IF i > 1 THEN
+            v_codes := v_codes || ', ';
+        END IF;
+        v_codes := v_codes || v_code;
+    END LOOP;
     
-    RETURN v_gift_card_id;
+    RETURN v_codes;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error creating gift card: %', SQLERRM;
+        RAISE;
 END;
 $$;
 
@@ -100,7 +118,15 @@ SECURITY DEFINER
 AS $$
 DECLARE
     v_gift_card_record gift_cards%ROWTYPE;
+    v_student_id UUID;
 BEGIN
+    -- Get the student ID
+    SELECT id INTO v_student_id FROM user_students WHERE id = auth.uid();
+    
+    IF v_student_id IS NULL THEN
+        RAISE EXCEPTION 'Only students can use gift cards';
+    END IF;
+
     -- Get the gift card
     SELECT * INTO v_gift_card_record
     FROM gift_cards
@@ -108,27 +134,21 @@ BEGIN
     FOR UPDATE;
     
     -- Check if gift card exists
-    IF v_gift_card_record.id IS NULL THEN
+    IF v_gift_card_record.code IS NULL THEN
         RAISE EXCEPTION 'Gift card not found';
     END IF;
     
     -- Check if gift card is already used
-    IF v_gift_card_record.is_used THEN
+    IF v_gift_card_record.redeemed_at IS NOT NULL THEN
         RAISE EXCEPTION 'Gift card has already been used';
-    END IF;
-    
-    -- Check if gift card is expired
-    IF v_gift_card_record.expires_at IS NOT NULL AND v_gift_card_record.expires_at < now() THEN
-        RAISE EXCEPTION 'Gift card has expired';
     END IF;
     
     -- Update gift card as used
     UPDATE gift_cards
     SET 
-        is_used = TRUE,
-        used_at = now(),
-        used_by = auth.uid()
-    WHERE id = v_gift_card_record.id;
+        redeemed_at = now(),
+        redeemed_by = v_student_id
+    WHERE code = v_gift_card_record.code;
     
     RETURN TRUE;
 END;
@@ -145,8 +165,8 @@ DECLARE
 BEGIN
     SELECT json_build_object(
         'total_cards', COUNT(*)::BIGINT,
-        'used_cards', COUNT(*) FILTER (WHERE is_used = TRUE)::BIGINT,
-        'unused_cards', COUNT(*) FILTER (WHERE is_used = FALSE)::BIGINT
+        'used_cards', COUNT(*) FILTER (WHERE redeemed_at IS NOT NULL)::BIGINT,
+        'unused_cards', COUNT(*) FILTER (WHERE redeemed_at IS NULL)::BIGINT
     ) INTO result
     FROM gift_cards;
     

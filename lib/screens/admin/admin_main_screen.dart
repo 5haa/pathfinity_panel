@@ -7,49 +7,106 @@ import 'package:admin_panel/screens/admin/tabs/admin_dashboard_tab.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_users_tab.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_content_tab.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_profile_tab.dart';
+import 'package:admin_panel/config/theme.dart';
 
-class AdminMainScreen extends ConsumerWidget {
-  const AdminMainScreen({Key? key}) : super(key: key);
+// Custom controller to provide tab navigation across the bottom nav bar
+final adminCurrentTabIndexProvider = StateProvider<int>((ref) => 0);
+
+class AdminMainScreen extends ConsumerStatefulWidget {
+  final int initialTab;
+
+  const AdminMainScreen({Key? key, this.initialTab = 0}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminMainScreen> createState() => _AdminMainScreenState();
+}
+
+class _AdminMainScreenState extends ConsumerState<AdminMainScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Set the initial tab indices
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialTab != 0) {
+        ref.read(adminCurrentTabIndexProvider.notifier).state =
+            widget.initialTab;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentTabIndex = ref.watch(adminCurrentTabIndexProvider);
+
     return BottomNavScaffold(
       title: 'Admin Dashboard',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.logout),
-          onPressed: () async {
-            try {
-              await ref.read(authProvider.notifier).signOut();
-              if (context.mounted) {
-                GoRouter.of(context).go('/login');
-              }
-            } catch (e) {
-              debugPrint('Error signing out: $e');
-            }
-          },
-          tooltip: 'Sign Out',
-        ),
-      ],
+      initialIndex: currentTabIndex,
+      onTabChanged: (index) {
+        ref.read(adminCurrentTabIndexProvider.notifier).state = index;
+      },
       items: [
         BottomNavItem(
           label: 'Dashboard',
-          icon: Icons.dashboard,
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/dashboard.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const AdminDashboardTab(),
         ),
         BottomNavItem(
           label: 'Users',
-          icon: Icons.people,
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/users.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const AdminUsersTab(),
         ),
         BottomNavItem(
-          label: 'Content',
-          icon: Icons.content_paste,
+          label: 'Courses',
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/content.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const AdminContentTab(),
         ),
         BottomNavItem(
           label: 'Profile',
-          icon: Icons.person,
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/profile.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
           screen: const AdminProfileTab(),
         ),
       ],

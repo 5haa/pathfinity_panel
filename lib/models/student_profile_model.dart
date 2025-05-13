@@ -10,6 +10,7 @@ class StudentProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? profilePictureUrl;
+  final List<String> skills;
 
   StudentProfile({
     required this.id,
@@ -23,6 +24,7 @@ class StudentProfile {
     required this.createdAt,
     required this.updatedAt,
     this.profilePictureUrl,
+    this.skills = const [],
   });
 
   factory StudentProfile.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,7 @@ class StudentProfile {
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
       profilePictureUrl: json['profile_picture_url'],
+      skills: json['skills'] != null ? List<String>.from(json['skills']) : [],
     );
   }
 

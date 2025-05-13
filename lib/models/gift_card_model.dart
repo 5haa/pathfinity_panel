@@ -1,56 +1,58 @@
 class GiftCard {
-  final String id;
   final String code;
-  final bool isUsed;
-  final DateTime? usedAt;
-  final String? usedBy;
   final DateTime createdAt;
-  final String createdBy;
-  final DateTime? expiresAt;
-  final String? notes;
+  final DateTime? redeemedAt;
+  final String? redeemedBy;
+  final int? days;
+  final int serial;
+  final DateTime updatedAt;
+  final String metadata;
+  final String? generatedBy;
 
   GiftCard({
-    required this.id,
     required this.code,
-    required this.isUsed,
-    this.usedAt,
-    this.usedBy,
     required this.createdAt,
-    required this.createdBy,
-    this.expiresAt,
-    this.notes,
+    this.redeemedAt,
+    this.redeemedBy,
+    this.days,
+    required this.serial,
+    required this.updatedAt,
+    required this.metadata,
+    this.generatedBy,
   });
 
   factory GiftCard.fromJson(Map<String, dynamic> json) {
     return GiftCard(
-      id: json['id'],
       code: json['code'],
-      isUsed: json['is_used'] ?? false,
-      usedAt: json['used_at'] != null ? DateTime.parse(json['used_at']) : null,
-      usedBy: json['used_by'],
       createdAt: DateTime.parse(json['created_at']),
-      createdBy: json['created_by'],
-      expiresAt:
-          json['expires_at'] != null
-              ? DateTime.parse(json['expires_at'])
+      redeemedAt:
+          json['redeemed_at'] != null
+              ? DateTime.parse(json['redeemed_at'])
               : null,
-      notes: json['notes'],
+      redeemedBy: json['redeemed_by'],
+      days: json['days'] != null ? int.parse(json['days'].toString()) : null,
+      serial: json['serial'],
+      updatedAt: DateTime.parse(json['updated_at']),
+      metadata: json['metadata'] ?? '',
+      generatedBy: json['generated_by'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'code': code,
-      'is_used': isUsed,
-      'used_at': usedAt?.toIso8601String(),
-      'used_by': usedBy,
       'created_at': createdAt.toIso8601String(),
-      'created_by': createdBy,
-      'expires_at': expiresAt?.toIso8601String(),
-      'notes': notes,
+      'redeemed_at': redeemedAt?.toIso8601String(),
+      'redeemed_by': redeemedBy,
+      'days': days,
+      'serial': serial,
+      'updated_at': updatedAt.toIso8601String(),
+      'metadata': metadata,
+      'generated_by': generatedBy,
     };
   }
+
+  bool get isUsed => redeemedAt != null;
 }
 
 class GiftCardStats {

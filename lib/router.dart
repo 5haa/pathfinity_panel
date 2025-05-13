@@ -16,9 +16,12 @@ import 'package:admin_panel/screens/content_creator/course_videos_screen.dart';
 import 'package:admin_panel/screens/content_creator/go_live_screen.dart';
 import 'package:admin_panel/screens/content_creator/broadcast_screen.dart';
 import 'package:admin_panel/screens/content_creator/live_sessions_screen.dart';
+import 'package:admin_panel/screens/content_creator/schedule_live_screen.dart';
 import 'package:admin_panel/models/live_session_model.dart';
 import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/services/auth_service.dart';
+import 'package:admin_panel/screens/admin/gift_card_management_screen.dart';
+import 'package:admin_panel/screens/admin/category_management_screen.dart';
 
 // Custom page transition
 class FadeTransitionPage extends CustomTransitionPage<void> {
@@ -223,6 +226,46 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CustomTransitionPage(
             key: state.pageKey,
             child: const AdminMainScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/categories',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const CategoryManagementScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/gift-cards',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const GiftCardManagementScreen(),
             transitionsBuilder: (
               context,
               animation,
@@ -496,6 +539,28 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+
+      // Content Creator Schedule Live Session route
+      GoRoute(
+        path: '/content-creator/schedule-live',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const ScheduleLiveScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
     ],
     errorBuilder:
         (context, state) => Scaffold(
@@ -553,6 +618,8 @@ Widget _buildPage(GoRouterState state) {
     return BroadcastScreen(sessionId: sessionId, liveSession: liveSession);
   } else if (state.matchedLocation == '/content-creator/live-sessions') {
     return const LiveSessionsScreen();
+  } else if (state.matchedLocation == '/content-creator/schedule-live') {
+    return const ScheduleLiveScreen();
   }
 
   // Error page

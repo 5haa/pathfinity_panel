@@ -51,6 +51,38 @@ def generate_token():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/generate-subscriber-token', methods=['POST'])
+def generate_subscriber_token():
+    try:
+        data = request.json
+        
+        # Validate request data
+        if not data or 'channelName' not in data:
+            return jsonify({'error': 'Channel name is required'}), 400
+            
+        channel_name = data['channelName']
+        uid = data.get('uid', 0)
+        role = 2  # 2 is the value for Subscriber role
+        expiration_time_in_seconds = data.get('expirationTimeInSeconds', 3600)  # Default: 1 hour
+        
+        # Calculate privilege expired timestamp
+        current_timestamp = int(time.time())
+        privilege_expired_ts = current_timestamp + expiration_time_in_seconds
+        
+        # Build token
+        token = RtcTokenBuilder.buildTokenWithUid(
+            AGORA_APP_ID,
+            AGORA_APP_CERTIFICATE,
+            channel_name,
+            uid,
+            role,
+            privilege_expired_ts
+        )
+        
+        return jsonify({'token': token})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)

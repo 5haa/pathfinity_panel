@@ -4,6 +4,7 @@ import 'package:admin_panel/widgets/bottom_nav_scaffold.dart';
 import 'package:admin_panel/screens/company/tabs/company_dashboard_tab.dart';
 import 'package:admin_panel/screens/company/tabs/company_jobs_tab.dart';
 import 'package:admin_panel/screens/company/tabs/company_profile_tab.dart';
+import 'package:admin_panel/screens/company/tabs/company_students_tab.dart';
 import 'package:admin_panel/config/theme.dart';
 
 // Custom controller to provide tab navigation across the bottom nav bar
@@ -59,6 +60,22 @@ class CompanyMainScreen extends ConsumerWidget {
           ),
           isIconData: false,
           screen: const CompanyJobsTab(),
+        ),
+        BottomNavItem(
+          label: 'Students',
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/student.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
+          screen: const CompanyStudentsTab(),
         ),
         BottomNavItem(
           label: 'Profile',

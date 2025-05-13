@@ -137,28 +137,99 @@ class AdminService {
     }
   }
 
-  // Create a new admin user (only super admins can do this)
-  Future<bool> createAdmin({
+  // Create a new alumni user
+  Future<bool> createAlumni({
     required String email,
-    required String username,
     required String firstName,
-    String? lastName,
-    required bool isSuperAdmin,
+    required String lastName,
+    required String password,
   }) async {
     try {
-      // This would typically involve creating a user in auth first
-      // and then adding them to the admin table
-      // For simplicity, we're just showing the admin table part
-      await _supabase.from('user_admins').insert({
+      // Create auth user
+      final authResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (authResponse.user == null) {
+        return false;
+      }
+
+      // Add user to alumni table
+      await _supabase.from('user_alumni').insert({
+        'id': authResponse.user!.id,
         'email': email,
-        'username': username,
         'first_name': firstName,
         'last_name': lastName,
-        'is_super_admin': isSuperAdmin,
+        'is_approved': true, // Auto-approve when created by admin
       });
       return true;
     } catch (e) {
-      debugPrint('Error creating admin: $e');
+      debugPrint('Error creating alumni: $e');
+      return false;
+    }
+  }
+
+  // Create a new company user
+  Future<bool> createCompany({
+    required String email,
+    required String companyName,
+    required String password,
+  }) async {
+    try {
+      // Create auth user
+      final authResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (authResponse.user == null) {
+        return false;
+      }
+
+      // Add user to companies table
+      await _supabase.from('user_companies').insert({
+        'id': authResponse.user!.id,
+        'email': email,
+        'company_name': companyName,
+        'is_approved': true, // Auto-approve when created by admin
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error creating company: $e');
+      return false;
+    }
+  }
+
+  // Create a new content creator user
+  Future<bool> createContentCreator({
+    required String email,
+    required String firstName,
+    required String lastName,
+    required String password,
+  }) async {
+    try {
+      // Create auth user
+      final authResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (authResponse.user == null) {
+        return false;
+      }
+
+      // Add user to content creators table
+      await _supabase.from('user_content_creators').insert({
+        'id': authResponse.user!.id,
+        'email': email,
+        'first_name': firstName,
+        'last_name': lastName,
+        'is_approved': true, // Auto-approve when created by admin
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error creating content creator: $e');
       return false;
     }
   }
@@ -211,6 +282,69 @@ class AdminService {
     } catch (e) {
       debugPrint('Error rejecting course: $e');
       return false;
+    }
+  }
+
+  // Get student statistics (total and pro members)
+  Future<Map<String, dynamic>> getStudentStatistics() async {
+    try {
+      // Get total students count
+      final totalStudentsResult = await _supabase
+          .from('user_students')
+          .select('id, premium, premium_expires_at');
+
+      final totalStudents = totalStudentsResult.length;
+
+      // Count premium students (considering expiration date)
+      int proStudents = 0;
+
+      for (var student in totalStudentsResult) {
+        bool isPremium = student['premium'] ?? false;
+        String? expiresAt = student['premium_expires_at'];
+
+        if (isPremium) {
+          // Check if premium is still valid
+          if (expiresAt == null) {
+            // No expiration date means permanent premium
+            proStudents++;
+          } else {
+            // Check if premium hasn't expired
+            final expiryDate = DateTime.parse(expiresAt);
+            if (expiryDate.isAfter(DateTime.now())) {
+              proStudents++;
+            }
+          }
+        }
+      }
+
+      return {
+        'totalStudents': totalStudents,
+        'proStudents': proStudents,
+        'freeStudents': totalStudents - proStudents,
+        'proPercentage':
+            totalStudents > 0
+                ? (proStudents / totalStudents * 100).toStringAsFixed(1)
+                : '0',
+      };
+    } catch (e) {
+      debugPrint('Error getting student statistics: $e');
+      return {
+        'totalStudents': 0,
+        'proStudents': 0,
+        'freeStudents': 0,
+        'proPercentage': '0',
+      };
+    }
+  }
+
+  // Get all students
+  Future<List<Map<String, dynamic>>> getAllStudents() async {
+    try {
+      final data = await _supabase.from('user_students').select();
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('Error getting students: $e');
+      return [];
     }
   }
 }

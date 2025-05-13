@@ -10,6 +10,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+import 'dart:async';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -27,7 +28,8 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final _chatService = ChatService();
@@ -38,31 +40,125 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   AlumniUser? _currentUserProfile;
   bool _showScrollButton = false;
   String? _studentProfilePictureUrl;
+  StreamSubscription? _messagesSubscription;
+  Timer? _markAsReadTimer;
+  bool _markingAsRead = false;
+  DateTime _lastMarkAsReadTime = DateTime(1970);
+  bool _isAppActive = true;
 
   @override
   void initState() {
     super.initState();
     _currentUserId = Supabase.instance.client.auth.currentUser!.id;
+    WidgetsBinding.instance.addObserver(this);
     _loadMessages();
     _loadCurrentUserProfile();
+    _subscribeToMessages();
 
     _scrollController.addListener(() {
       final showButton =
+          _scrollController.hasClients &&
           _scrollController.position.pixels <
-          _scrollController.position.maxScrollExtent - 500;
+              _scrollController.position.maxScrollExtent - 500;
       if (showButton != _showScrollButton) {
         setState(() {
           _showScrollButton = showButton;
         });
       }
     });
+
+    // Mark messages as read immediately when entering a chat
+    _markMessagesAsReadNow();
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _messagesSubscription?.cancel();
+    _markAsReadTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    _isAppActive = state == AppLifecycleState.resumed;
+
+    // Mark messages as read when app comes to foreground
+    if (_isAppActive) {
+      _markMessagesAsReadNow();
+    }
+  }
+
+  void _subscribeToMessages() {
+    try {
+      final messageStream = _chatService.listenToMessages(
+        widget.conversationId,
+      );
+      _messagesSubscription = messageStream.listen(
+        (messages) {
+          if (mounted) {
+            // Check if there are new unread messages
+            final hasNewUnreadMessages = _hasUnreadMessages(messages);
+
+            setState(() {
+              _messages = messages;
+            });
+
+            // Only mark as read if there are unread messages and the app is active
+            if (hasNewUnreadMessages && _isAppActive) {
+              _debouncedMarkMessagesAsRead();
+            }
+
+            // Scroll to bottom if we were already at the bottom
+            if (_scrollController.hasClients &&
+                _scrollController.position.pixels >
+                    _scrollController.position.maxScrollExtent - 200) {
+              // Use a slight delay to let the UI render first
+              Future.delayed(const Duration(milliseconds: 100), () {
+                _scrollToBottom();
+              });
+            }
+          }
+        },
+        onError: (error) {
+          debugPrint('Error in message subscription: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('Error subscribing to messages: $e');
+    }
+  }
+
+  bool _hasUnreadMessages(List<ChatMessage> messages) {
+    // Check if there are messages from the other user that are unread
+    return messages.any((msg) => msg.senderId != _currentUserId && !msg.isRead);
+  }
+
+  void _debouncedMarkMessagesAsRead() {
+    // Cancel any pending mark-as-read operation
+    _markAsReadTimer?.cancel();
+
+    // Don't schedule if we're already in the process of marking messages as read
+    if (_markingAsRead) return;
+
+    // Don't mark as read if we've done so recently (within the last 5 seconds)
+    final now = DateTime.now();
+    if (now.difference(_lastMarkAsReadTime).inSeconds < 5) return;
+
+    // Schedule a mark-as-read operation with a delay to debounce multiple calls
+    _markAsReadTimer = Timer(const Duration(milliseconds: 500), () {
+      _markMessagesAsRead();
+    });
+  }
+
+  // Call this when we want to mark messages as read immediately (e.g., when entering the chat)
+  void _markMessagesAsReadNow() {
+    if (_markingAsRead) return;
+    _markMessagesAsRead();
   }
 
   Future<void> _loadMessages() async {
@@ -72,36 +168,105 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       final messages = await _chatService.getMessages(widget.conversationId);
-      setState(() {
-        _messages = messages;
-        _isLoading = false;
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+          _isLoading = false;
 
-        // Set student profile picture from messages if available
-        if (messages.isNotEmpty) {
-          final studentMessages =
-              messages.where((msg) => msg.senderId != _currentUserId).toList();
-          if (studentMessages.isNotEmpty &&
-              studentMessages.first.senderProfilePictureUrl != null) {
-            _studentProfilePictureUrl =
-                studentMessages.first.senderProfilePictureUrl;
+          // Set student profile picture from messages if available
+          if (messages.isNotEmpty) {
+            final studentMessages =
+                messages
+                    .where((msg) => msg.senderId != _currentUserId)
+                    .toList();
+            if (studentMessages.isNotEmpty &&
+                studentMessages.first.senderProfilePictureUrl != null) {
+              _studentProfilePictureUrl =
+                  studentMessages.first.senderProfilePictureUrl;
+            }
           }
-        }
-      });
+        });
 
-      // Mark messages as read
-      _chatService.markMessagesAsRead(widget.conversationId);
-
-      // Scroll to bottom after messages load
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollToBottom();
+        // Only mark as read if there are unread messages
+        if (_hasUnreadMessages(messages)) {
+          _markMessagesAsRead();
         }
-      });
+
+        // Scroll to bottom after messages load
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollToBottom();
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Error loading messages: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    // Prevent concurrent mark-as-read operations
+    if (_markingAsRead) return;
+
+    _markingAsRead = true;
+
+    try {
+      // Try to mark messages as read with retry logic
+      bool success = false;
+      int retries = 0;
+      const maxRetries = 3;
+
+      while (!success && retries < maxRetries) {
+        try {
+          final result = await _chatService.markMessagesAsRead(
+            widget.conversationId,
+          );
+          success = result;
+
+          if (success) {
+            _lastMarkAsReadTime = DateTime.now();
+
+            // Update local messages to show as read immediately
+            setState(() {
+              for (int i = 0; i < _messages.length; i++) {
+                if (_messages[i].senderId != _currentUserId &&
+                    !_messages[i].isRead) {
+                  // Create a new instance with isRead set to true
+                  _messages[i] = ChatMessage(
+                    id: _messages[i].id,
+                    conversationId: _messages[i].conversationId,
+                    senderId: _messages[i].senderId,
+                    content: _messages[i].content,
+                    isRead: true,
+                    createdAt: _messages[i].createdAt,
+                    updatedAt: _messages[i].updatedAt,
+                    senderProfile: _messages[i].senderProfile,
+                  );
+                }
+              }
+            });
+          }
+        } catch (e) {
+          retries++;
+          if (retries >= maxRetries) {
+            debugPrint(
+              'Failed to mark messages as read after $maxRetries attempts: $e',
+            );
+            break;
+          }
+          // Wait before retrying
+          await Future.delayed(Duration(milliseconds: 300 * retries));
+        }
+      }
+    } catch (e) {
+      debugPrint('Error in _markMessagesAsRead: $e');
+    } finally {
+      _markingAsRead = false;
     }
   }
 
@@ -537,11 +702,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                       if (isFromCurrentUser) ...[
                         const SizedBox(width: 4),
-                        Icon(
-                          Icons.done_all,
-                          size: 14,
-                          color: Colors.white.withOpacity(0.7),
-                        ),
+                        _buildReadStatus(message),
                       ],
                     ],
                   ),
@@ -569,6 +730,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildReadStatus(ChatMessage message) {
+    if (message.isRead) {
+      // Double blue check for read messages - make it more obvious
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 300),
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Icon(
+              Icons.done_all,
+              size: 16, // Slightly larger
+              color: Colors.blue[200], // Light blue to make it stand out
+            ),
+          );
+        },
+      );
+    } else {
+      // Single check for unread/delivered messages
+      return Icon(
+        Icons.done,
+        size: 14,
+        color: Colors.white.withOpacity(0.6), // More transparent for unread
+      );
+    }
   }
 
   Widget _buildMessageInput() {

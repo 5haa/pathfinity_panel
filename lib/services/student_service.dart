@@ -66,4 +66,48 @@ class StudentService {
       return [];
     }
   }
+
+  // Get all unique skills from students
+  Future<List<String>> getAllSkills() async {
+    try {
+      final List<StudentProfile> students = await getAllStudents();
+
+      // Extract all skills and create a unique set
+      final Set<String> uniqueSkills = {};
+      for (final student in students) {
+        uniqueSkills.addAll(student.skills);
+      }
+
+      return uniqueSkills.toList()..sort();
+    } catch (e) {
+      debugPrint('Error getting skills: $e');
+      return [];
+    }
+  }
+
+  // Filter students by skills
+  Future<List<StudentProfile>> filterStudentsBySkills(
+    List<String> selectedSkills,
+  ) async {
+    try {
+      if (selectedSkills.isEmpty) {
+        return getAllStudents();
+      }
+
+      final allStudents = await getAllStudents();
+
+      return allStudents.where((student) {
+        // Check if student has any of the selected skills
+        for (final skill in selectedSkills) {
+          if (student.skills.contains(skill)) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+    } catch (e) {
+      debugPrint('Error filtering students by skills: $e');
+      return [];
+    }
+  }
 }

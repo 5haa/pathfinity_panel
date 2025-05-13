@@ -5,6 +5,7 @@ import 'package:admin_panel/models/chat_message_model.dart';
 import 'package:admin_panel/models/chat_participant_model.dart';
 import 'package:admin_panel/models/alumni_model.dart';
 import 'package:admin_panel/models/student_profile_model.dart';
+import 'dart:async';
 
 class ChatService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -12,9 +13,14 @@ class ChatService {
   // Get all conversations for the specified alumni user or current user
   Future<List<Map<String, dynamic>>> getConversations([String? userId]) async {
     try {
-      // Get conversations where the specified user or current user is a participant
+      // Get the current user ID
       final currentUserId = userId ?? _supabase.auth.currentUser!.id;
+      if (currentUserId.isEmpty) {
+        debugPrint('Error: Empty user ID when getting conversations');
+        return [];
+      }
 
+      // Get conversations where the current user is a participant
       final data = await _supabase
           .from('chat_participants')
           .select('conversation_id')
@@ -32,32 +38,62 @@ class ChatService {
 
       for (final convId in conversationIds) {
         try {
-          // Get the conversation
-          final convData =
+          if (convId == null || convId.toString().isEmpty) {
+            debugPrint('Skipping null or empty conversation ID');
+            continue;
+          }
+
+          // Get conversation - skip if it doesn't exist
+          final convDataResponse =
               await _supabase
                   .from('chat_conversations')
                   .select()
                   .eq('id', convId)
-                  .single();
+                  .maybeSingle();
 
-          // Get the other participant (student)
+          if (convDataResponse == null) {
+            debugPrint('Conversation $convId not found, skipping');
+            continue;
+          }
+
+          final convData = convDataResponse;
+
+          // Get the other participant (student) - skip if there's no other participant
           final participantData =
               await _supabase
                   .from('chat_participants')
                   .select()
                   .eq('conversation_id', convId)
                   .neq('user_id', currentUserId)
-                  .single();
+                  .maybeSingle();
+
+          if (participantData == null) {
+            debugPrint(
+              'No other participant found for conversation $convId, skipping',
+            );
+            continue;
+          }
 
           final studentId = participantData['user_id'];
+          if (studentId == null || studentId.toString().isEmpty) {
+            debugPrint('Invalid student ID for conversation $convId, skipping');
+            continue;
+          }
 
-          // Get student profile
+          // Get student profile - skip if student profile doesn't exist
           final studentData =
               await _supabase
                   .from('user_students')
                   .select()
                   .eq('id', studentId)
-                  .single();
+                  .maybeSingle();
+
+          if (studentData == null) {
+            debugPrint(
+              'Student profile not found for ID $studentId, skipping conversation',
+            );
+            continue;
+          }
 
           // Get last message
           final messages = await _supabase
@@ -100,28 +136,29 @@ class ChatService {
         }
       }
 
-      // Sort by last message time
+      // Sort by last message time, with safer parsing logic
       result.sort((a, b) {
-        final DateTime aTime;
-        final DateTime bTime;
+        DateTime? aTime;
+        DateTime? bTime;
 
         try {
-          aTime =
-              a['last_message_time'] != null
-                  ? DateTime.parse(a['last_message_time'])
-                  : DateTime.parse(a['updated_at']);
+          final aTimeStr = a['last_message_time'] ?? a['updated_at'];
+          if (aTimeStr != null) aTime = DateTime.parse(aTimeStr);
         } catch (e) {
-          return 1; // Move items with parsing errors to the end
+          // Ignore parsing errors
         }
 
         try {
-          bTime =
-              b['last_message_time'] != null
-                  ? DateTime.parse(b['last_message_time'])
-                  : DateTime.parse(b['updated_at']);
+          final bTimeStr = b['last_message_time'] ?? b['updated_at'];
+          if (bTimeStr != null) bTime = DateTime.parse(bTimeStr);
         } catch (e) {
-          return -1; // Move items with parsing errors to the end
+          // Ignore parsing errors
         }
+
+        // Handle null cases
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1; // Move items with null time to the end
+        if (bTime == null) return -1;
 
         return bTime.compareTo(aTime); // Latest first
       });
@@ -129,7 +166,7 @@ class ChatService {
       return result;
     } catch (e) {
       debugPrint('Error getting conversations: $e');
-      return [];
+      rethrow; // Rethrow to allow proper handling by the caller
     }
   }
 
@@ -167,6 +204,23 @@ class ChatService {
     String studentId,
   ) async {
     try {
+      // Validate inputs
+      if (alumniId.isEmpty || studentId.isEmpty) {
+        debugPrint('Error: Empty user IDs when creating conversation');
+        return null;
+      }
+
+      // Check if users exist before creating a conversation
+      final alumniExists = await _userExists(alumniId, 'user_alumni');
+      final studentExists = await _userExists(studentId, 'user_students');
+
+      if (!alumniExists || !studentExists) {
+        debugPrint(
+          'Error: Cannot create conversation - one or both users do not exist',
+        );
+        return null;
+      }
+
       // Check if a conversation already exists between these users
       final alumniConversations = await _supabase
           .from('chat_participants')
@@ -191,7 +245,7 @@ class ChatService {
         }
       }
 
-      // Create a new conversation
+      // Create a new conversation only if explicitly required
       final conversationData =
           await _supabase
               .from('chat_conversations')
@@ -229,7 +283,7 @@ class ChatService {
           .from('chat_messages')
           .select()
           .eq('conversation_id', conversationId)
-          .order('created_at');
+          .order('created_at', ascending: true);
 
       // Fetch sender profiles for each message
       final messagesWithProfiles = await Future.wait(
@@ -310,6 +364,25 @@ class ChatService {
     try {
       final userId = _supabase.auth.currentUser!.id;
 
+      // Validate inputs
+      if (userId.isEmpty || studentId.isEmpty) {
+        debugPrint(
+          'Error: Empty user ID when creating conversation with student',
+        );
+        return null;
+      }
+
+      // Check if users exist before creating a conversation
+      final userExists = await _userExists(userId, 'user_alumni');
+      final studentExists = await _userExists(studentId, 'user_students');
+
+      if (!userExists || !studentExists) {
+        debugPrint(
+          'Error: Cannot create conversation - one or both users do not exist',
+        );
+        return null;
+      }
+
       // Check if a conversation already exists between these users
       final existingConversations = await _supabase
           .from('chat_participants')
@@ -370,15 +443,41 @@ class ChatService {
     try {
       final userId = _supabase.auth.currentUser!.id;
 
+      // Check if there are any unread messages first to avoid unnecessary updates
+      final unreadMessages = await _supabase
+          .from('chat_messages')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .eq('is_read', false)
+          .neq('sender_id', userId);
+
+      // If no unread messages, return early
+      if (unreadMessages.isEmpty) {
+        return true;
+      }
+
+      // Add a timeout to prevent hanging requests
       await _supabase
           .from('chat_messages')
           .update({'is_read': true})
           .eq('conversation_id', conversationId)
-          .neq('sender_id', userId);
+          .neq('sender_id', userId)
+          .timeout(const Duration(seconds: 5));
 
       return true;
     } catch (e) {
+      // Log but don't rethrow - this is a background operation that can fail silently
       debugPrint('Error marking messages as read: $e');
+
+      // If it's a timeout or server error, we should still consider it handled
+      if (e.toString().contains('timeout') ||
+          e.toString().contains('503') ||
+          e.toString().contains('Service Unavailable')) {
+        debugPrint(
+          'Timeout or server error when marking messages as read - will retry later',
+        );
+      }
+
       return false;
     }
   }
@@ -419,11 +518,107 @@ class ChatService {
 
   // Listen for new messages in a conversation
   Stream<List<ChatMessage>> listenToMessages(String conversationId) {
-    return _supabase
-        .from('chat_messages')
-        .stream(primaryKey: ['id'])
-        .eq('conversation_id', conversationId)
-        .order('created_at')
-        .map((data) => data.map((item) => ChatMessage.fromJson(item)).toList());
+    try {
+      // Create a controller to manage the stream
+      final controller = StreamController<List<ChatMessage>>();
+
+      // Add initial empty list to prevent waiting for first message
+      controller.add([]);
+
+      // Initial load of messages
+      getMessages(conversationId)
+          .then((messages) {
+            if (!controller.isClosed) {
+              controller.add(messages);
+
+              // Mark messages as read on initial load if there are any unread
+              _checkAndMarkMessagesAsRead(conversationId, messages);
+            }
+          })
+          .catchError((error) {
+            debugPrint('Error loading initial messages: $error');
+            if (!controller.isClosed) {
+              // Don't emit error, just keep the stream alive
+              controller.add([]);
+            }
+          });
+
+      // Set up the real-time subscription
+      final subscription = _supabase
+          .from('chat_messages')
+          .stream(primaryKey: ['id'])
+          .eq('conversation_id', conversationId)
+          .order('created_at', ascending: true)
+          .listen(
+            (data) async {
+              try {
+                // Full message data needs to be loaded to include sender profiles
+                final messages = await getMessages(conversationId);
+                if (!controller.isClosed) {
+                  controller.add(messages);
+
+                  // Check for unread messages from others and mark as read if needed
+                  _checkAndMarkMessagesAsRead(conversationId, messages);
+                }
+              } catch (e) {
+                debugPrint('Error processing subscription update: $e');
+                // Don't emit error, just keep using the last known messages
+              }
+            },
+            onError: (error) {
+              debugPrint('Error in subscription: $error');
+              // Don't close the stream on error
+            },
+          );
+
+      // Clean up when the stream is canceled
+      controller.onCancel = () {
+        subscription.cancel();
+        controller.close();
+      };
+
+      return controller.stream;
+    } catch (e) {
+      debugPrint('Error setting up message stream: $e');
+      // Return a stream that emits an empty list on error
+      return Stream.value([]);
+    }
+  }
+
+  // Helper method to check for unread messages and mark them as read
+  void _checkAndMarkMessagesAsRead(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) {
+    try {
+      final currentUserId = _supabase.auth.currentUser!.id;
+      final hasUnreadFromOthers = messages.any(
+        (msg) => msg.senderId != currentUserId && !msg.isRead,
+      );
+
+      // Only attempt to mark messages as read if there are any unread from others
+      if (hasUnreadFromOthers) {
+        markMessagesAsRead(conversationId);
+      }
+    } catch (e) {
+      debugPrint('Error in _checkAndMarkMessagesAsRead: $e');
+    }
+  }
+
+  // Helper to check if a user exists in a specific table
+  Future<bool> _userExists(String userId, String tableName) async {
+    try {
+      final result =
+          await _supabase
+              .from(tableName)
+              .select('id')
+              .eq('id', userId)
+              .maybeSingle();
+
+      return result != null;
+    } catch (e) {
+      debugPrint('Error checking if user exists: $e');
+      return false;
+    }
   }
 }

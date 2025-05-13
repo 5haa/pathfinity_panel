@@ -3,8 +3,9 @@ class LiveSession {
   final String creatorId;
   final String courseId;
   final String title;
-  final String status; // 'active' or 'ended'
+  final String status; // 'scheduled', 'active', 'ended', or 'cancelled'
   final String channelName;
+  final DateTime? scheduledAt;
   final DateTime startedAt;
   final DateTime? endedAt;
   final int viewerCount;
@@ -18,6 +19,7 @@ class LiveSession {
     required this.title,
     required this.status,
     required this.channelName,
+    this.scheduledAt,
     required this.startedAt,
     this.endedAt,
     required this.viewerCount,
@@ -33,6 +35,10 @@ class LiveSession {
       title: json['title'],
       status: json['status'],
       channelName: json['channel_name'],
+      scheduledAt:
+          json['scheduled_at'] != null
+              ? DateTime.parse(json['scheduled_at'])
+              : null,
       startedAt: DateTime.parse(json['started_at']),
       endedAt:
           json['ended_at'] != null ? DateTime.parse(json['ended_at']) : null,
@@ -50,6 +56,7 @@ class LiveSession {
       'title': title,
       'status': status,
       'channel_name': channelName,
+      'scheduled_at': scheduledAt?.toIso8601String(),
       'started_at': startedAt.toIso8601String(),
       'ended_at': endedAt?.toIso8601String(),
       'viewer_count': viewerCount,
@@ -65,6 +72,7 @@ class LiveSession {
     String? title,
     String? status,
     String? channelName,
+    DateTime? scheduledAt,
     DateTime? startedAt,
     DateTime? endedAt,
     int? viewerCount,
@@ -78,6 +86,7 @@ class LiveSession {
       title: title ?? this.title,
       status: status ?? this.status,
       channelName: channelName ?? this.channelName,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
       startedAt: startedAt ?? this.startedAt,
       endedAt: endedAt ?? this.endedAt,
       viewerCount: viewerCount ?? this.viewerCount,

@@ -192,23 +192,27 @@ class _ProfilePictureWidgetState extends State<ProfilePictureWidget> {
 
   Widget _buildInitialsAvatar() {
     String initials = '';
+
     if (widget.name.isNotEmpty) {
-      final nameParts = widget.name.split(' ');
-      if (nameParts.isNotEmpty) {
+      final nameParts = widget.name.trim().split(' ');
+
+      if (nameParts.isNotEmpty && nameParts.first.isNotEmpty) {
         initials += nameParts.first[0].toUpperCase();
-        if (nameParts.length > 1) {
+
+        if (nameParts.length > 1 && nameParts.last.isNotEmpty) {
           initials += nameParts.last[0].toUpperCase();
         }
       }
     }
 
+    // Default to question mark if no initials could be extracted
     if (initials.isEmpty) {
       initials = '?';
     }
 
     return CircleAvatar(
       radius: widget.size / 2,
-      backgroundColor: AppTheme.secondaryColor,
+      backgroundColor: _getAvatarColor(),
       child: Text(
         initials,
         style: TextStyle(
@@ -218,5 +222,37 @@ class _ProfilePictureWidgetState extends State<ProfilePictureWidget> {
         ),
       ),
     );
+  }
+
+  Color _getAvatarColor() {
+    // Use different colors based on user type or generate a color from userId
+    // to keep the same color for the same user
+    switch (widget.userType) {
+      case UserType.alumni:
+        return AppTheme.primaryColor;
+      case UserType.admin:
+        return AppTheme.accentColor;
+      case UserType.company:
+        return Colors.teal;
+      case UserType.contentCreator:
+        return Colors.purple;
+      case UserType.unknown:
+      default:
+        // Generate a color based on the user ID to ensure consistency
+        if (widget.userId.isNotEmpty) {
+          final int hashCode = widget.userId.hashCode;
+          final List<Color> colors = [
+            AppTheme.primaryColor,
+            AppTheme.secondaryColor,
+            AppTheme.accentColor,
+            Colors.purple,
+            Colors.teal,
+            Colors.indigo,
+            Colors.orange,
+          ];
+          return colors[hashCode.abs() % colors.length];
+        }
+        return AppTheme.secondaryColor;
+    }
   }
 }

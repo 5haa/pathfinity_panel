@@ -211,36 +211,100 @@ class _ContentCreatorDashboardTabState
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Scaffold(
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _contentCreatorUser == null
+              ? const Center(child: Text('Error loading creator profile'))
+              : RefreshIndicator(
+                onRefresh: _loadContentCreatorProfile,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      _buildProfileHeader(),
+                      const SizedBox(height: 24),
 
-    if (_contentCreatorUser == null) {
-      return const Center(child: Text('Error loading content creator profile'));
-    }
+                      // Add Live Sessions Button
+                      if (_contentCreatorUser!.isApproved) ...[
+                        Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: InkWell(
+                            onTap: () {
+                              GoRouter.of(
+                                context,
+                              ).push('/content-creator/live-sessions');
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withOpacity(
+                                        0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.video_library,
+                                      color: AppTheme.primaryColor,
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'My Live Sessions',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'Manage your scheduled, active, and past live sessions',
+                                          style: TextStyle(
+                                            color: AppTheme.textLightColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppTheme.primaryColor,
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: Center(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildProfileHeader(),
-                const SizedBox(height: 24),
-                _buildStatisticsGrid(),
-                const SizedBox(height: 24),
-                _buildCoursesSection(),
-                const SizedBox(
-                  height: 80,
-                ), // Add bottom padding for navigation bar
-              ],
-            ),
-          ),
-        ),
-      ),
+                      _buildStatisticsGrid(),
+                      const SizedBox(height: 24),
+                      _buildCoursesSection(),
+                    ],
+                  ),
+                ),
+              ),
     );
   }
 
