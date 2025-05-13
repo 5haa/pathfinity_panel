@@ -49,7 +49,7 @@ class CustomButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(borderRadius),
         ),
         elevation: 1,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       ),
       child: _buildButtonContent(),
     );
@@ -64,7 +64,7 @@ class CustomButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(borderRadius),
         ),
         side: BorderSide(color: _getButtonColor(), width: 1.5),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       ),
       child: _buildButtonContent(isOutlined: true),
     );
@@ -89,16 +89,16 @@ class CustomButton extends StatelessWidget {
         children: [
           Icon(
             icon,
-            size: 20,
+            size: 18,
             color: isOutlined ? _getButtonColor() : Colors.white,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Text(
             text,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
+              letterSpacing: 0.2,
               color: isOutlined ? _getButtonColor() : Colors.white,
             ),
           ),
@@ -109,9 +109,9 @@ class CustomButton extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.3,
+        letterSpacing: 0.2,
         color: isOutlined ? _getButtonColor() : Colors.white,
       ),
     );
