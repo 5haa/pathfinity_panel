@@ -324,15 +324,20 @@ class _ContentCreatorDashboardState
               ? const Center(child: Text('Error loading creator profile'))
               : SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildProfileSection(),
-                    const SizedBox(height: 32),
-                    _buildApprovalStatus(),
-                    const SizedBox(height: 32),
-                    _buildCoursesSection(),
-                  ],
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Center(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProfileSection(),
+                        const SizedBox(height: 32),
+                        _buildApprovalStatus(),
+                        const SizedBox(height: 32),
+                        _buildCoursesSection(),
+                      ],
+                    ),
+                  ),
                 ),
               ),
       floatingActionButton:
@@ -446,6 +451,8 @@ class _ContentCreatorDashboardState
           child: Text(
             value,
             style: const TextStyle(fontSize: 16, color: AppTheme.textColor),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 3,
           ),
         ),
       ],
@@ -744,6 +751,7 @@ class _ContentCreatorDashboardState
                   ),
                   const SizedBox(height: 8),
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: AppTheme.secondaryColor),
@@ -979,54 +987,44 @@ class _ContentCreatorDashboardState
               style: const TextStyle(color: AppTheme.textColor),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(
-                  Icons.category,
-                  size: 16,
-                  color: AppTheme.textLightColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Category: $categoryName',
-                  style: const TextStyle(
-                    color: AppTheme.textLightColor,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(
-                  Icons.card_membership,
-                  size: 16,
-                  color: AppTheme.textLightColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Membership: ${course['membership_type'] ?? 'PRO'}',
-                  style: const TextStyle(
-                    color: AppTheme.textLightColor,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const Icon(
-                  Icons.fitness_center,
-                  size: 16,
-                  color: AppTheme.textLightColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Difficulty: ${course['difficulty'] ?? 'MEDIUM'}',
-                  style: const TextStyle(
-                    color: AppTheme.textLightColor,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 600) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildCourseDetailRow('Category', categoryName),
+                      const SizedBox(height: 8),
+                      _buildCourseDetailRow(
+                        'Difficulty',
+                        course['difficulty'] ?? 'N/A',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildCourseDetailRow(
+                        'Videos',
+                        '${course['videos_count'] ?? 0}',
+                      ),
+                    ],
+                  );
+                } else {
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      _buildCourseDetailChip('Category', categoryName),
+                      _buildCourseDetailChip(
+                        'Difficulty',
+                        course['difficulty'] ?? 'N/A',
+                      ),
+                      _buildCourseDetailChip(
+                        'Videos',
+                        '${course['videos_count'] ?? 0}',
+                      ),
+                    ],
+                  );
+                }
+              },
             ),
             const SizedBox(height: 16),
             Row(
@@ -1047,6 +1045,27 @@ class _ContentCreatorDashboardState
                     type: ButtonType.primary,
                     height: 36,
                     icon: Icons.live_tv,
+                  )
+                else
+                  Tooltip(
+                    message: 'Course must be approved and active to go live',
+                    child: CustomButton(
+                      text: 'Go Live',
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'You can only go live with approved and active courses.',
+                            ),
+                            backgroundColor: AppTheme.warningColor,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                      type: ButtonType.secondary,
+                      height: 36,
+                      icon: Icons.live_tv,
+                    ),
                   ),
                 const SizedBox(width: 8),
                 CustomButton(
@@ -1069,6 +1088,31 @@ class _ContentCreatorDashboardState
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCourseDetailRow(String label, String value) {
+    return Row(
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCourseDetailChip(String label, String value) {
+    return Chip(
+      label: Text('$label: $value'),
+      backgroundColor: Colors.grey[200],
     );
   }
 }

@@ -1,16 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:admin_panel/config/theme.dart';
 import 'package:admin_panel/models/content_creator_model.dart';
+import 'package:admin_panel/models/course_model.dart';
+import 'package:admin_panel/models/course_category_model.dart';
 import 'package:admin_panel/services/content_creator_service.dart';
+import 'package:admin_panel/services/course_video_service.dart';
 import 'package:admin_panel/services/auth_service.dart';
+import 'package:admin_panel/services/course_category_service.dart';
 import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
+import 'package:admin_panel/widgets/custom_text_field.dart';
+import 'package:admin_panel/widgets/course/course_card.dart';
+import 'package:admin_panel/widgets/course/course_form.dart';
+import 'package:admin_panel/widgets/course/empty_state.dart';
+import 'package:admin_panel/widgets/course/filter_chips.dart';
+import 'package:admin_panel/widgets/course/thumbnail_selector.dart';
 
 final contentCreatorServiceProvider = Provider<ContentCreatorService>(
   (ref) => ContentCreatorService(),
 );
+
+final courseVideoServiceProvider = Provider<CourseVideoService>(
+  (ref) => CourseVideoService(),
+);
+
+final courseCategoryServiceProvider = Provider<CourseCategoryService>((ref) {
+  return CourseCategoryService();
+});
 
 class ContentCreatorCoursesTab extends ConsumerStatefulWidget {
   const ContentCreatorCoursesTab({Key? key}) : super(key: key);
@@ -26,11 +46,45 @@ class _ContentCreatorCoursesTabState
   bool _isLoading = true;
   List<Map<String, dynamic>> _courses = [];
   String _selectedFilter = 'All';
+  bool _isCreatingCourse = false;
+  List<CourseCategory> _categories = [];
+  File? _thumbnailFile;
+  String? _currentThumbnailUrl;
+  bool _isUploading = false;
+
+  // Form controllers for creating a course
+  final _courseFormKey = GlobalKey<FormState>();
+  final _courseTitleController = TextEditingController();
+  final _courseDescriptionController = TextEditingController();
+  String? _selectedCategoryId;
+  String _selectedMembershipType = MembershipType.pro;
+  String _selectedDifficulty = DifficultyLevel.medium;
 
   @override
   void initState() {
     super.initState();
     _loadContentCreatorProfile();
+    _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    _courseTitleController.dispose();
+    _courseDescriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categoryService = ref.read(courseCategoryServiceProvider);
+      final categories = await categoryService.getAllCategories();
+
+      setState(() {
+        _categories = categories;
+      });
+    } catch (e) {
+      debugPrint('Error loading categories: $e');
+    }
   }
 
   Future<void> _loadContentCreatorProfile() async {
@@ -61,55 +115,49 @@ class _ContentCreatorCoursesTabState
     if (_contentCreatorUser == null) return;
 
     try {
-      // In a real app, you would use a method from the service
-      // For now, we'll use mock data
+      final contentCreatorService = ref.read(contentCreatorServiceProvider);
+      final courseVideoService = ref.read(courseVideoServiceProvider);
+
+      // Get courses from the service
+      final courses = await contentCreatorService.getCreatorCourses(
+        _contentCreatorUser!.id,
+      );
+
+      // Process courses to add additional information
+      final List<Map<String, dynamic>> processedCourses = [];
+
+      for (final course in courses) {
+        // Get videos for this course to count them
+        final videos = await courseVideoService.getCourseVideos(course['id']);
+
+        // Create a processed course with additional information
+        final processedCourse = Map<String, dynamic>.from(course);
+
+        // Add video count
+        processedCourse['videos_count'] = videos.length;
+
+        // Add student count (in a real app, you would get this from a service)
+        processedCourse['students_count'] = 0; // Placeholder
+
+        // Add status based on is_approved
+        final bool isApproved = course['is_approved'] ?? false;
+
+        processedCourse['status'] = isApproved ? 'Published' : 'Pending';
+
+        // Add created_at as DateTime
+        processedCourse['created_at'] = DateTime.parse(course['created_at']);
+
+        processedCourses.add(processedCourse);
+      }
+
       setState(() {
-        _courses = [
-          {
-            'id': '1',
-            'title': 'Flutter Development Masterclass',
-            'description':
-                'Learn Flutter from scratch and build real-world apps',
-            'thumbnail': 'https://example.com/flutter.jpg',
-            'videos_count': 24,
-            'students_count': 156,
-            'status': 'Published',
-            'created_at': DateTime.now().subtract(const Duration(days: 60)),
-          },
-          {
-            'id': '2',
-            'title': 'Advanced React & Redux',
-            'description': 'Master React, Redux, and modern JavaScript',
-            'thumbnail': 'https://example.com/react.jpg',
-            'videos_count': 32,
-            'students_count': 218,
-            'status': 'Published',
-            'created_at': DateTime.now().subtract(const Duration(days: 45)),
-          },
-          {
-            'id': '3',
-            'title': 'Python for Data Science',
-            'description': 'Learn Python for data analysis and visualization',
-            'thumbnail': 'https://example.com/python.jpg',
-            'videos_count': 18,
-            'students_count': 94,
-            'status': 'Draft',
-            'created_at': DateTime.now().subtract(const Duration(days: 15)),
-          },
-          {
-            'id': '4',
-            'title': 'Machine Learning Fundamentals',
-            'description': 'Introduction to machine learning algorithms',
-            'thumbnail': 'https://example.com/ml.jpg',
-            'videos_count': 0,
-            'students_count': 0,
-            'status': 'Draft',
-            'created_at': DateTime.now().subtract(const Duration(days: 5)),
-          },
-        ];
+        _courses = processedCourses;
       });
     } catch (e) {
       debugPrint('Error loading courses: $e');
+      setState(() {
+        _courses = [];
+      });
     }
   }
 
@@ -123,16 +171,116 @@ class _ContentCreatorCoursesTabState
     }
   }
 
+  Future<void> _selectThumbnail() async {
+    final file = await ThumbnailSelector.selectThumbnail(context);
+    if (file != null) {
+      setState(() {
+        _thumbnailFile = file;
+      });
+    }
+  }
+
   void _createNewCourse() {
-    // In a real app, this would navigate to a course creation screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Create new course functionality would be implemented here',
+    setState(() {
+      _isCreatingCourse = true;
+      _courseTitleController.clear();
+      _courseDescriptionController.clear();
+      _selectedCategoryId = null;
+      _selectedMembershipType = MembershipType.pro;
+      _selectedDifficulty = DifficultyLevel.medium;
+      _thumbnailFile = null;
+      _currentThumbnailUrl = null;
+    });
+  }
+
+  void _cancelCreateCourse() {
+    setState(() {
+      _isCreatingCourse = false;
+    });
+  }
+
+  Future<void> _submitCreateCourse() async {
+    if (!_courseFormKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_contentCreatorUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User profile not loaded. Please try again.'),
+          backgroundColor: AppTheme.errorColor,
         ),
-        backgroundColor: AppTheme.primaryColor,
-      ),
-    );
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _isUploading = _thumbnailFile != null;
+    });
+
+    try {
+      final contentCreatorService = ref.read(contentCreatorServiceProvider);
+
+      // TODO: In a real implementation, upload the thumbnail file first and get the URL
+      String? thumbnailUrl;
+
+      // This would be replaced with actual file upload logic
+      if (_thumbnailFile != null) {
+        // Simulate upload delay
+        await Future.delayed(const Duration(seconds: 1));
+        // In real implementation: thumbnailUrl = await uploadService.uploadFile(_thumbnailFile!);
+        thumbnailUrl =
+            'https://example.com/sample-thumbnail.jpg'; // Placeholder
+      }
+
+      final courseId = await contentCreatorService.createCourse(
+        creatorId: _contentCreatorUser!.id,
+        title: _courseTitleController.text.trim(),
+        description: _courseDescriptionController.text.trim(),
+        categoryId: _selectedCategoryId,
+        membershipType: _selectedMembershipType,
+        difficulty: _selectedDifficulty,
+        // Add thumbnailUrl here in a real implementation
+      );
+
+      if (courseId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Course created successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+
+        setState(() {
+          _isCreatingCourse = false;
+          _isUploading = false;
+        });
+
+        // Reload courses
+        await _loadCourses();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to create course'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error creating course: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error creating course: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _isUploading = false;
+      });
+    }
   }
 
   void _navigateToCourseVideos(String courseId, String courseTitle) {
@@ -149,16 +297,207 @@ class _ContentCreatorCoursesTabState
   }
 
   void _editCourse(String courseId) {
-    // In a real app, this would navigate to a course edit screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Edit course with ID: $courseId'),
-        backgroundColor: AppTheme.primaryColor,
-      ),
+    // Find the course with this ID
+    final course = _courses.firstWhere(
+      (c) => c['id'] == courseId,
+      orElse: () => {},
+    );
+    if (course.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Course not found'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    // Populate form fields with existing course data
+    _courseTitleController.text = course['title'] as String;
+    _courseDescriptionController.text = course['description'] as String? ?? '';
+    _selectedCategoryId = course['category_id'] as String?;
+    _selectedMembershipType =
+        course['membership_type'] as String? ?? MembershipType.pro;
+    _selectedDifficulty =
+        course['difficulty'] as String? ?? DifficultyLevel.medium;
+    _thumbnailFile = null;
+    _currentThumbnailUrl = course['thumbnail_url'] as String?;
+
+    // Show the edit form
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.8,
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: CourseForm(
+                    formKey: _courseFormKey,
+                    titleController: _courseTitleController,
+                    descriptionController: _courseDescriptionController,
+                    selectedCategoryId: _selectedCategoryId,
+                    selectedMembershipType: _selectedMembershipType,
+                    selectedDifficulty: _selectedDifficulty,
+                    thumbnailFile: _thumbnailFile,
+                    currentThumbnailUrl: _currentThumbnailUrl,
+                    categories: _categories,
+                    isUploading: _isUploading,
+                    isEditing: true,
+                    onCategoryChanged: (value) {
+                      setState(() {
+                        _selectedCategoryId = value;
+                      });
+                    },
+                    onMembershipTypeChanged: (value) {
+                      setState(() {
+                        _selectedMembershipType = value;
+                      });
+                    },
+                    onDifficultyChanged: (value) {
+                      setState(() {
+                        _selectedDifficulty = value;
+                      });
+                    },
+                    onSelectThumbnail: () async {
+                      final file = await ThumbnailSelector.selectThumbnail(
+                        context,
+                      );
+                      if (file != null) {
+                        setState(() {
+                          _thumbnailFile = file;
+                        });
+                      }
+                    },
+                    onSubmit: () {
+                      if (_courseFormKey.currentState!.validate()) {
+                        Navigator.pop(context);
+                        _updateCourse(courseId);
+                      }
+                    },
+                    onCancel: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  void _deleteCourse(String courseId) {
+  Future<void> _updateCourse(String courseId) async {
+    setState(() {
+      _isLoading = true;
+      _isUploading = _thumbnailFile != null;
+    });
+
+    try {
+      final contentCreatorService = ref.read(contentCreatorServiceProvider);
+
+      // TODO: In a real implementation, upload the thumbnail file first and get the URL
+      String? thumbnailUrl;
+
+      // This would be replaced with actual file upload logic
+      if (_thumbnailFile != null) {
+        // Simulate upload delay
+        await Future.delayed(const Duration(seconds: 1));
+        // In real implementation: thumbnailUrl = await uploadService.uploadFile(_thumbnailFile!);
+        thumbnailUrl =
+            'https://example.com/sample-updated-thumbnail.jpg'; // Placeholder
+      }
+
+      // In a real app, you would call a service to update the course
+      final success = await contentCreatorService.requestCourseChanges(
+        courseId: courseId,
+        title: _courseTitleController.text.trim(),
+        description: _courseDescriptionController.text.trim(),
+        categoryId: _selectedCategoryId,
+      );
+
+      // Update membership type and difficulty directly (assuming direct update is allowed)
+      // Note: This would require an additional service method in a real app
+      final course = _courses.firstWhere((c) => c['id'] == courseId);
+      course['membership_type'] = _selectedMembershipType;
+      course['difficulty'] = _selectedDifficulty;
+
+      if (thumbnailUrl != null) {
+        course['thumbnail_url'] = thumbnailUrl;
+      }
+
+      if (success) {
+        // Update the local course data
+        for (var i = 0; i < _courses.length; i++) {
+          if (_courses[i]['id'] == courseId) {
+            _courses[i]['title'] = _courseTitleController.text;
+            _courses[i]['description'] = _courseDescriptionController.text;
+            _courses[i]['category_id'] = _selectedCategoryId;
+            _courses[i]['membership_type'] = _selectedMembershipType;
+            _courses[i]['difficulty'] = _selectedDifficulty;
+
+            if (thumbnailUrl != null) {
+              _courses[i]['thumbnail_url'] = thumbnailUrl;
+            }
+
+            // Update category object if needed
+            if (_selectedCategoryId != null) {
+              final category = _categories.firstWhere(
+                (c) => c.id == _selectedCategoryId,
+                orElse:
+                    () => CourseCategory(
+                      id: '',
+                      name: 'Unknown',
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                    ),
+              );
+              _courses[i]['category'] = category.toJson();
+            }
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Course "${_courseTitleController.text}" updated successfully',
+            ),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+
+        setState(() {}); // Refresh UI
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update course'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error updating course: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating course: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _isUploading = false;
+      });
+    }
+  }
+
+  Future<void> _deleteCourse(String courseId) async {
     // Show confirmation dialog
     showDialog(
       context: context,
@@ -174,19 +513,50 @@ class _ContentCreatorCoursesTabState
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(context);
-                  // In a real app, this would call a service to delete the course
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Course with ID: $courseId deleted'),
-                      backgroundColor: AppTheme.successColor,
-                    ),
-                  );
-                  // Simulate course deletion
+
                   setState(() {
-                    _courses.removeWhere((course) => course['id'] == courseId);
+                    _isLoading = true;
                   });
+
+                  try {
+                    // In a real app, you would call a service to delete the course
+                    // For now, we'll just simulate the deletion
+                    await Future.delayed(const Duration(milliseconds: 500));
+
+                    // Remove the course from the list
+                    setState(() {
+                      _courses.removeWhere(
+                        (course) => course['id'] == courseId,
+                      );
+                      _isLoading = false;
+                    });
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Course with ID: $courseId deleted'),
+                          backgroundColor: AppTheme.successColor,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    debugPrint('Error deleting course: $e');
+
+                    setState(() {
+                      _isLoading = false;
+                    });
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Failed to delete course'),
+                          backgroundColor: AppTheme.errorColor,
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: const Text(
                   'Delete',
@@ -208,18 +578,35 @@ class _ContentCreatorCoursesTabState
       return const Center(child: Text('Error loading content creator profile'));
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(),
-        _buildFilterChips(),
-        Expanded(
-          child:
-              _filteredCourses.isEmpty
-                  ? _buildEmptyState()
-                  : _buildCoursesList(),
-        ),
-      ],
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          if (_isCreatingCourse)
+            _buildCreateCourseForm()
+          else
+            CourseFilterChips(
+              selectedFilter: _selectedFilter,
+              onFilterChanged: (filter) {
+                setState(() {
+                  _selectedFilter = filter;
+                });
+              },
+            ),
+          if (!_isCreatingCourse)
+            Expanded(
+              child:
+                  _filteredCourses.isEmpty
+                      ? EmptyCoursesState(
+                        selectedFilter: _selectedFilter,
+                        onCreateCourse: _createNewCourse,
+                      )
+                      : _buildCoursesList(),
+            ),
+          const SizedBox(height: 16), // Add bottom padding for navigation bar
+        ],
+      ),
     );
   }
 
@@ -244,237 +631,67 @@ class _ContentCreatorCoursesTabState
     );
   }
 
-  Widget _buildFilterChips() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _buildFilterChip('All'),
-            const SizedBox(width: 8),
-            _buildFilterChip('Published'),
-            const SizedBox(width: 8),
-            _buildFilterChip('Draft'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _selectedFilter = label;
-        });
-      },
-      backgroundColor: Colors.grey[200],
-      selectedColor: AppTheme.primaryColor.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primaryColor : Colors.black,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.book, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            _selectedFilter == 'All'
-                ? 'No courses yet'
-                : 'No $_selectedFilter courses',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _selectedFilter == 'All'
-                ? 'Create your first course to get started'
-                : 'Try selecting a different filter',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-          const SizedBox(height: 24),
-          if (_selectedFilter == 'All')
-            CustomButton(
-              text: 'Create New Course',
-              onPressed: _createNewCourse,
-              icon: Icons.add,
-              type: ButtonType.primary,
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCoursesList() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredCourses.length,
       itemBuilder: (context, index) {
         final course = _filteredCourses[index];
-        return _buildCourseCard(course);
+        return CourseCard(
+          course: course,
+          onEditTap: _editCourse,
+          onDeleteTap: _deleteCourse,
+          onVideosTap: _navigateToCourseVideos,
+          onGoLiveTap: _navigateToGoLive,
+        );
       },
     );
   }
 
-  Widget _buildCourseCard(Map<String, dynamic> course) {
-    final String id = course['id'];
-    final String title = course['title'];
-    final String description = course['description'];
-    final int videosCount = course['videos_count'];
-    final int studentsCount = course['students_count'];
-    final String status = course['status'];
-    final DateTime createdAt = course['created_at'];
-
-    // Determine status color
-    Color statusColor;
-    switch (status) {
-      case 'Published':
-        statusColor = Colors.green;
-        break;
-      case 'Draft':
-        statusColor = Colors.orange;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
+  Widget _buildCreateCourseForm() {
+    return Expanded(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: CourseForm(
+              formKey: _courseFormKey,
+              titleController: _courseTitleController,
+              descriptionController: _courseDescriptionController,
+              selectedCategoryId: _selectedCategoryId,
+              selectedMembershipType: _selectedMembershipType,
+              selectedDifficulty: _selectedDifficulty,
+              thumbnailFile: _thumbnailFile,
+              categories: _categories,
+              isUploading: _isUploading,
+              isLoading: _isLoading,
+              onCategoryChanged: (value) {
+                setState(() {
+                  _selectedCategoryId = value;
+                });
+              },
+              onMembershipTypeChanged: (value) {
+                setState(() {
+                  _selectedMembershipType = value;
+                });
+              },
+              onDifficultyChanged: (value) {
+                setState(() {
+                  _selectedDifficulty = value;
+                });
+              },
+              onSelectThumbnail: _selectThumbnail,
+              onSubmit: _submitCreateCourse,
+              onCancel: _cancelCreateCourse,
             ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.textLightColor,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(Icons.video_library, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  '$videosCount videos',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.people, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  '$studentsCount students',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  'Created ${_formatDate(createdAt)}',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _navigateToCourseVideos(id, title),
-                  icon: const Icon(Icons.video_library),
-                  label: const Text('Videos'),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => _navigateToGoLive(id, title),
-                  icon: const Icon(Icons.live_tv),
-                  label: const Text('Go Live'),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  tooltip: 'Edit Course',
-                  onPressed: () => _editCourse(id),
-                  color: Colors.orange,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  tooltip: 'Delete Course',
-                  onPressed: () => _deleteCourse(id),
-                  color: Colors.red,
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 30) {
-      return '${(difference.inDays / 30).floor()} months ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
-    } else {
-      return 'Just now';
-    }
   }
 }

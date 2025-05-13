@@ -9,6 +9,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
 import 'package:admin_panel/widgets/custom_text_field.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
+import 'package:intl/intl.dart';
 
 final contentCreatorServiceProvider = Provider<ContentCreatorService>(
   (ref) => ContentCreatorService(),
@@ -139,6 +140,35 @@ class _ContentCreatorProfileTabState
     }
   }
 
+  Future<void> _initiatePasswordReset() async {
+    try {
+      if (_contentCreatorUser != null) {
+        // Navigate to the forgot password screen with the email pre-filled
+        GoRouter.of(context).go('/forgot-password');
+
+        // Show a message to the user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Follow the instructions to reset your password'),
+              backgroundColor: AppTheme.infoColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error initiating password reset: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An error occurred. Please try again.'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _signOut() async {
     try {
       // Use the auth notifier to sign out
@@ -162,70 +192,68 @@ class _ContentCreatorProfileTabState
       return const Center(child: Text('Error loading content creator profile'));
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Profile Information',
-                        style: AppTheme.headingStyle,
-                      ),
-                      if (!_isEditing)
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () {
-                            setState(() {
-                              _isEditing = true;
-                            });
-                          },
-                          tooltip: 'Edit Profile',
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Profile Information',
+                          style: AppTheme.headingStyle,
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  _isEditing ? _buildEditForm() : _buildProfileInfo(),
-                ],
+                        if (!_isEditing)
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () {
+                              setState(() {
+                                _isEditing = true;
+                              });
+                            },
+                            tooltip: 'Edit Profile',
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _isEditing ? _buildEditForm() : _buildProfileInfo(),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Account Actions', style: AppTheme.headingStyle),
-                  const SizedBox(height: 24),
-                  CustomButton(
-                    text: 'Sign Out',
-                    onPressed: _signOut,
-                    type: ButtonType.danger,
-                    icon: Icons.logout,
-                  ),
-                ],
+            const SizedBox(height: 24),
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Account Actions', style: AppTheme.headingStyle),
+                    const SizedBox(height: 24),
+                    _buildAccountActions(),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 80), // Add bottom padding for navigation bar
+          ],
+        ),
       ),
     );
   }
@@ -287,16 +315,58 @@ class _ContentCreatorProfileTabState
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textLightColor,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(fontSize: 16, color: AppTheme.textColor),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 3,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAccountActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.lock_outline, color: AppTheme.primaryColor),
+          ),
+          title: const Text('Reset Password'),
+          subtitle: const Text('Update your account password'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            _initiatePasswordReset();
+          },
+        ),
+        const Divider(),
+        ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.errorColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.logout, color: AppTheme.errorColor),
+          ),
+          title: const Text('Sign Out'),
+          subtitle: const Text('Log out from your account'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _signOut,
+        ),
+      ],
     );
   }
 

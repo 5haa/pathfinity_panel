@@ -89,7 +89,7 @@ class CustomButton extends StatelessWidget {
         children: [
           Icon(
             icon,
-            size: 18,
+            size: 16,
             color: isOutlined ? _getButtonColor() : Colors.white,
           ),
           const SizedBox(width: 8),

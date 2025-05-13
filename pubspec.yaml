@@ -107,6 +107,7 @@ flutter:
     - assets/internships.png
     - assets/chat.png
     - assets/student.png
+    - assets/course.png
 
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg

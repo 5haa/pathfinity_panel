@@ -33,16 +33,42 @@ class _GoLiveScreenState extends ConsumerState<GoLiveScreen> {
   void initState() {
     super.initState();
     _loadApprovedCourses();
+  }
 
-    // Set preselected course if provided
-    if (widget.preselectedCourseId != null) {
-      _selectedCourseId = widget.preselectedCourseId;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Handle preselected course after approved courses are loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isLoading && widget.preselectedCourseId != null) {
+        // Check if the preselected course is in the approved courses list
+        final isCourseApproved = _approvedCourses.any(
+          (course) => course['id'] == widget.preselectedCourseId,
+        );
 
-      // Set default session title if course title is provided
-      if (widget.preselectedCourseTitle != null) {
-        _titleController.text = 'Live: ${widget.preselectedCourseTitle}';
+        if (isCourseApproved) {
+          setState(() {
+            _selectedCourseId = widget.preselectedCourseId;
+
+            // Set default session title if course title is provided
+            if (widget.preselectedCourseTitle != null) {
+              _titleController.text = 'Live: ${widget.preselectedCourseTitle}';
+            }
+          });
+        } else if (widget.preselectedCourseId != null && mounted) {
+          // Show a message if trying to go live with a non-approved course
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'You can only go live with approved and active courses.',
+              ),
+              backgroundColor: AppTheme.warningColor,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
       }
-    }
+    });
   }
 
   @override
@@ -74,6 +100,7 @@ class _GoLiveScreenState extends ConsumerState<GoLiveScreen> {
     } catch (e) {
       debugPrint('Error loading approved courses: $e');
       setState(() {
+        _approvedCourses = [];
         _isLoading = false;
       });
     }
@@ -84,6 +111,23 @@ class _GoLiveScreenState extends ConsumerState<GoLiveScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill all required fields'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    // Double-check that the selected course is in the approved courses list
+    final isCourseApproved = _approvedCourses.any(
+      (course) => course['id'] == _selectedCourseId,
+    );
+
+    if (!isCourseApproved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You can only go live with approved and active courses.',
+          ),
           backgroundColor: AppTheme.errorColor,
         ),
       );
