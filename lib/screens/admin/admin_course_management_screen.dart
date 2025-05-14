@@ -410,7 +410,15 @@ class _AdminCourseManagementScreenState
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            context.go('/admin');
+            try {
+              context.go('/admin');
+            } catch (e) {
+              // Fallback navigation in case of routing issues
+              debugPrint('Navigation error: $e');
+              Navigator.of(context).canPop()
+                  ? Navigator.of(context).pop()
+                  : context.go('/admin');
+            }
           },
         ),
         actions: [

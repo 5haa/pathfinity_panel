@@ -260,7 +260,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Educational Content (${_courses.length})',
+                            'Courses (${_courses.length})',
                             style: AppTheme.subheadingStyle,
                           ),
                           if (_courseChanges.isNotEmpty) const Spacer(),

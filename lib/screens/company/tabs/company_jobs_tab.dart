@@ -816,7 +816,28 @@ class _CompanyJobsTabState extends ConsumerState<CompanyJobsTab> {
 
   Widget _buildInternshipCard(Internship internship) {
     final bool isActive = internship.isActive;
-    final bool isApproved = internship.isApproved ?? false;
+    final dynamic isApprovedValue = internship.isApproved;
+
+    // Handle the approval status correctly
+    String statusText;
+    Color statusColor;
+    bool showRejectionReason = false;
+
+    if (isApprovedValue == null) {
+      // Pending status
+      statusText = 'Pending';
+      statusColor = AppTheme.warningColor;
+    } else if (isApprovedValue == true) {
+      // Approved status
+      statusText = 'Approved';
+      statusColor = AppTheme.successColor;
+    } else {
+      // Rejected status (isApprovedValue is false)
+      statusText = 'Rejected';
+      statusColor = AppTheme.errorColor;
+      showRejectionReason = true;
+    }
+
     final List<String> skills = internship.skills;
 
     return Card(
@@ -846,7 +867,70 @@ class _CompanyJobsTabState extends ConsumerState<CompanyJobsTab> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                _buildStatusIndicator(isApproved, isActive),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Status: $statusText',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            isActive
+                                ? 'Availability: Active'
+                                : 'Availability: Inactive',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color:
+                                  isActive
+                                      ? AppTheme.infoColor
+                                      : AppTheme.textLightColor,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                isActive
+                                    ? AppTheme.infoColor
+                                    : AppTheme.textLightColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ],
             ),
             const Divider(height: 24),
@@ -856,6 +940,51 @@ class _CompanyJobsTabState extends ConsumerState<CompanyJobsTab> {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
+            // Display rejection reason if internship is rejected
+            if (showRejectionReason && internship.rejectionReason != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppTheme.errorColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Rejection Reason:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.errorColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            internship.rejectionReason!,
+                            style: const TextStyle(
+                              color: AppTheme.textColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             _buildInfoRow(Icons.access_time, internship.duration),
             if (internship.city != null && internship.city!.isNotEmpty)
@@ -964,70 +1093,6 @@ class _CompanyJobsTabState extends ConsumerState<CompanyJobsTab> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildStatusIndicator(bool isApproved, bool isActive) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                isApproved ? 'Status: Approved' : 'Status: Pending',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color:
-                      isApproved
-                          ? AppTheme.successColor
-                          : AppTheme.warningColor,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color:
-                    isApproved ? AppTheme.successColor : AppTheme.warningColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                isActive ? 'Availability: Active' : 'Availability: Inactive',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color:
-                      isActive ? AppTheme.infoColor : AppTheme.textLightColor,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isActive ? AppTheme.infoColor : AppTheme.textLightColor,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 

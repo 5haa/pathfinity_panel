@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # Supabase
-  supabase_flutter: ^2.3.4
+  supabase_flutter: ^2.9.0
   
   # State management
   flutter_riverpod: ^2.5.1

@@ -117,28 +117,42 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     });
 
     try {
+      final email = _emailController.text.trim();
       final userData = _getUserData();
 
-      debugPrint(
-        'Registering user: ${_emailController.text.trim()} with type: $_selectedUserType',
-      );
+      debugPrint('Registering user: $email with type: $_selectedUserType');
+
+      // Run diagnostic check on RLS policies
+      final authService = AuthService();
+      final policyDiagnostics = await authService.diagnosePolicyIssues();
+      debugPrint('Policy diagnostics: $policyDiagnostics');
+
+      // Check if user already exists
+      final userExists = await authService.checkExistingUser(email);
+
+      if (userExists) {
+        setState(() {
+          _errorMessage =
+              'This email is already registered. Please try logging in instead or use a different email.';
+          _isLoading = false;
+        });
+        return;
+      }
 
       // Use the auth notifier to sign up
       await ref
           .read(authProvider.notifier)
           .signUp(
-            email: _emailController.text.trim(),
+            email: email,
             password: _passwordController.text,
             userType: _selectedUserType,
             userData: userData,
           );
 
-      debugPrint('User registered successfully, sending verification email');
+      debugPrint('Sign up completed');
 
       // Send verification email
-      await ref
-          .read(authProvider.notifier)
-          .sendEmailVerification(_emailController.text.trim());
+      await ref.read(authProvider.notifier).sendEmailVerification(email);
 
       debugPrint(
         'Verification email sent, proceeding to OTP verification screen',
@@ -153,19 +167,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         ),
       );
 
-      // Navigate to OTP verification screen
-      GoRouter.of(context).go(
-        '/verify-email?email=${Uri.encodeComponent(_emailController.text.trim())}',
-      );
+      // Navigate to OTP verification screen - ensure we use the navgiation directly to bypass any routing redirects
+      debugPrint('Navigating to OTP verification screen');
+      if (mounted) {
+        GoRouter.of(
+          context,
+        ).go('/verify-email?email=${Uri.encodeComponent(email)}');
+      }
     } catch (e) {
       debugPrint('Error during registration: $e');
       if (!mounted) return;
       setState(() {
         if (e is AuthException) {
           _errorMessage = e.message;
+        } else if (e.toString().contains('409')) {
+          // Handle 409 Conflict error specifically
+          _errorMessage =
+              'This email is already registered. Please try logging in instead or use a different email.';
         } else {
           _errorMessage =
-              'An error occurred during registration. Please try again.';
+              'An error occurred during registration. Please try again: ${e.toString()}';
         }
       });
     } finally {

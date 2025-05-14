@@ -106,7 +106,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // Check if the error is specifically about email not being confirmed
       if (e is AuthException &&
           (e.message.contains('Email not confirmed') ||
-              e.message.contains('Email hasn\'t been confirmed'))) {
+              e.message.contains('Email hasn\'t been confirmed') ||
+              e.message.contains('not verified') ||
+              e.message.contains('not confirmed'))) {
         debugPrint('Caught unconfirmed email error, handling it');
 
         try {

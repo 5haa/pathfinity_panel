@@ -105,6 +105,14 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
   }
 
   Future<void> _verifyOTP() async {
+    // Prevent multiple verification attempts
+    if (_isLoading) {
+      debugPrint(
+        'Verification already in progress, ignoring duplicate request',
+      );
+      return;
+    }
+
     final enteredOtp = _getEnteredOtp();
     if (enteredOtp.length != _otpLength) {
       setState(() {
@@ -113,80 +121,164 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       return;
     }
 
+    // Store email locally to avoid accessing widget later
+    final email = widget.email;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      debugPrint('Verifying OTP for email: ${widget.email}');
+      debugPrint('Verifying OTP for email: $email');
 
+      // First check if email is already verified to avoid unnecessary verification
+      final isAlreadyVerified =
+          await ref.read(authProvider.notifier).isEmailVerified();
+
+      // Before we do anything with state or navigation, check if widget is still mounted
+      if (!mounted) return;
+
+      if (isAlreadyVerified) {
+        debugPrint('Email is already verified, skipping OTP verification');
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Show success message and navigate
+        _showSuccessAndNavigate();
+        return;
+      }
+
+      // Try to verify the OTP
       final success = await ref
           .read(authProvider.notifier)
-          .verifyOTP(widget.email, enteredOtp);
+          .verifyOTP(email, enteredOtp);
+
+      // Immediately check if widget is still mounted
+      if (!mounted) return;
 
       debugPrint('OTP verification result: $success');
 
-      if (!mounted) return; // Check mounted after await
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email verified successfully!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-
-        // Navigate to appropriate screen based on user type
-        final userTypeInfo = ref.read(userTypeInfoProvider);
-        debugPrint(
-          'User type info after verification: ${userTypeInfo?.userType}',
-        );
-
-        if (userTypeInfo != null) {
-          switch (userTypeInfo.userType) {
-            case UserType.admin:
-              debugPrint('Navigating to admin dashboard');
-              GoRouter.of(context).go('/admin');
-              break;
-            case UserType.alumni:
-              debugPrint('Navigating to alumni dashboard');
-              GoRouter.of(context).go('/alumni');
-              break;
-            case UserType.company:
-              debugPrint('Navigating to company dashboard');
-              GoRouter.of(context).go('/company');
-              break;
-            case UserType.contentCreator:
-              debugPrint('Navigating to content creator dashboard');
-              GoRouter.of(context).go('/content-creator');
-              break;
-            default:
-              debugPrint('Unknown user type, navigating to login screen');
-              GoRouter.of(context).go('/login');
-          }
-        } else {
-          debugPrint('No user type info found, navigating to login screen');
-          GoRouter.of(context).go('/login');
-        }
-      } else {
-        // Handle OTP verification failure (e.g., invalid code)
-        setState(() {
-          _errorMessage = 'Invalid verification code. Please try again.';
-        });
-      }
-    } catch (e) {
-      debugPrint('Error verifying OTP: $e');
-      if (!mounted) return; // Check mounted after await in catch
-      setState(() {
-        _errorMessage = 'Failed to verify OTP. Please try again later.';
-      });
-    } finally {
-      if (!mounted) return; // Check mounted after await in finally
       setState(() {
         _isLoading = false;
       });
+
+      if (success) {
+        _showSuccessAndNavigate();
+      } else {
+        // Double-check the verification status before showing error
+        final lastChance =
+            await ref.read(authProvider.notifier).isEmailVerified();
+
+        // Check mounted again after async operation
+        if (!mounted) return;
+
+        if (lastChance) {
+          debugPrint('OTP verification succeeded on secondary check');
+          _showSuccessAndNavigate();
+        } else {
+          setState(() {
+            _errorMessage = 'Invalid verification code. Please try again.';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error verifying OTP: $e');
+
+      // Always check mounted before accessing state or context
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      // Check if the error message suggests the user might actually be verified
+      if (e.toString().contains('User already confirmed') ||
+          e.toString().contains('already confirmed') ||
+          e.toString().contains('already verified')) {
+        _showSuccessAndNavigate();
+      } else {
+        setState(() {
+          _errorMessage =
+              'Failed to verify OTP: ${e.toString().split(']').last.trim()}';
+        });
+      }
     }
+  }
+
+  // Show success message and initiate navigation
+  void _showSuccessAndNavigate() {
+    if (!mounted) return;
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Email verified successfully!'),
+        backgroundColor: AppTheme.successColor,
+      ),
+    );
+
+    // Get navigation information before any navigation starts
+    final userTypeInfo = ref.read(userTypeInfoProvider);
+    final userType = userTypeInfo?.userType;
+    final isApproved = userTypeInfo?.isApproved ?? false;
+    String navigationPath = '/login'; // Default fallback
+
+    debugPrint(
+      'User type info after verification: $userType, Approved: $isApproved',
+    );
+
+    // Determine where to navigate
+    if (userTypeInfo != null && !isApproved) {
+      debugPrint(
+        'User requires approval, will navigate to waiting approval screen',
+      );
+      navigationPath = '/waiting-approval';
+    } else if (userTypeInfo != null) {
+      switch (userType) {
+        case UserType.admin:
+          navigationPath = '/admin';
+          break;
+        case UserType.alumni:
+          navigationPath = '/alumni/chat';
+          break;
+        case UserType.company:
+          navigationPath = '/company';
+          break;
+        case UserType.contentCreator:
+          navigationPath = '/content-creator';
+          break;
+        default:
+          navigationPath = '/login';
+      }
+    }
+
+    // Navigate using a post-frame callback to ensure it happens after the current build
+    final BuildContext currentContext = context;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // First check if the widget is still mounted
+        if (!mounted) return;
+
+        debugPrint('Navigating to: $navigationPath');
+
+        // First try to get the GoRouter instance from the saved context
+        final router = GoRouter.of(currentContext);
+        router.go(navigationPath);
+      } catch (e) {
+        debugPrint('Error during navigation: $e');
+        // Fallback navigation if GoRouter fails
+        try {
+          if (mounted) {
+            GoRouter.of(context).go(navigationPath);
+          }
+        } catch (e2) {
+          debugPrint('Fallback navigation also failed: $e2');
+        }
+      }
+    });
   }
 
   Future<void> _resendOTP() async {
@@ -341,7 +433,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
                       // Verify Button
                       CustomButton(
                         text: 'Verify Email',
-                        onPressed: _verifyOTP,
+                        onPressed: () {
+                          if (!_isLoading) {
+                            _verifyOTP();
+                          }
+                        },
                         isLoading: _isLoading,
                         isFullWidth: true,
                         icon: Icons.check_circle_outline,
@@ -433,9 +529,17 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
                 // Handle backspace: move focus to previous field
                 FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
               }
-              // Trigger verification automatically if all fields are filled
-              if (_getEnteredOtp().length == _otpLength && !_isLoading) {
-                _verifyOTP();
+
+              // Verify if all fields are filled, but only if not already loading
+              final enteredOtp = _getEnteredOtp();
+              if (enteredOtp.length == _otpLength && !_isLoading) {
+                // Use a delayed verification to avoid widget deactivation issues
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !_isLoading) {
+                    debugPrint('Auto-triggering OTP verification');
+                    _verifyOTP();
+                  }
+                });
               }
             },
           ),

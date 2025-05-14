@@ -129,6 +129,10 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }) async {
     try {
       state = state.copyWith(isLoading: true, errorMessage: null);
+      debugPrint(
+        'AuthNotifier: Starting user signup with email: $email and type: $userType',
+      );
+      debugPrint('AuthNotifier: User data: $userData');
 
       final response = await _authService.signUp(
         email: email,
@@ -137,22 +141,46 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         userData: userData,
       );
 
-      final userTypeInfo = await _authService.getUserTypeAndStatus();
+      debugPrint(
+        'AuthNotifier: Auth response received. User ID: ${response.user?.id}',
+      );
 
-      state = state.copyWith(
-        user: response.user,
-        userTypeInfo: userTypeInfo,
-        isLoading: false,
-      );
+      if (response.user != null) {
+        debugPrint('AuthNotifier: User created successfully in auth system');
+        final userTypeInfo = await _authService.getUserTypeAndStatus();
+        debugPrint(
+          'AuthNotifier: Retrieved user type info: ${userTypeInfo.userType}, approved: ${userTypeInfo.isApproved}',
+        );
+
+        state = state.copyWith(
+          user: response.user,
+          userTypeInfo: userTypeInfo,
+          isLoading: false,
+        );
+      } else {
+        debugPrint(
+          'AuthNotifier: User creation in auth system returned null user',
+        );
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'User creation failed. Please try again.',
+        );
+        throw Exception('User creation failed with no specific error message');
+      }
     } catch (e) {
-      debugPrint('Error signing up: $e');
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage:
-            e is AuthException
-                ? e.message
-                : 'An error occurred during registration. Please try again.',
-      );
+      debugPrint('AuthNotifier: Error during signup process: $e');
+      String errorMsg;
+
+      if (e is AuthException) {
+        errorMsg = e.message;
+      } else if (e.toString().contains('409')) {
+        errorMsg =
+            'This email is already registered. Please try logging in instead or use a different email.';
+      } else {
+        errorMsg = 'An error occurred during registration: ${e.toString()}';
+      }
+
+      state = state.copyWith(isLoading: false, errorMessage: errorMsg);
       rethrow;
     }
   }

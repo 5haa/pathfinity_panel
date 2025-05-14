@@ -70,24 +70,44 @@ class AuthService {
     required Map<String, dynamic> userData,
   }) async {
     try {
+      debugPrint(
+        'Starting user signup process for email: $email and user type: $userType',
+      );
+
       // Add user type to metadata
       final String userTypeString = _getUserTypeString(userType);
+      debugPrint('User type string: $userTypeString');
 
       // Create user in auth
+      debugPrint('Creating auth user with email: $email');
       final response = await _supabase.auth.signUp(
         email: email,
         password: password,
-        data: {'p_user_type': userTypeString, ...userData},
+        data: {'p_user_type': 'user_' + userTypeString, ...userData},
       );
+
+      debugPrint('Auth user creation response: ${response.user?.id}');
 
       // If user is created successfully, add user data to the appropriate table
       if (response.user != null) {
-        await _createUserProfile(response.user!.id, userType, userData);
+        debugPrint('Auth user created successfully. Creating user profile...');
+        try {
+          await _createUserProfile(response.user!.id, userType, userData);
+          debugPrint('User profile created successfully');
+        } catch (profileError) {
+          debugPrint('Error creating user profile: $profileError');
+          // We could add cleanup here if needed
+          rethrow;
+        }
+      } else {
+        debugPrint(
+          'Auth user creation failed with no error: ${response.session}, ${response.user}',
+        );
       }
 
       return response;
     } catch (e) {
-      debugPrint('Error signing up: $e');
+      debugPrint('Error during signup process: $e');
       rethrow;
     }
   }
@@ -187,6 +207,7 @@ class AuthService {
     try {
       debugPrint('AuthService: Verifying OTP for email: $email');
 
+      // First, try to verify the OTP
       final response = await _supabase.auth.verifyOTP(
         email: email,
         token: otp,
@@ -194,24 +215,51 @@ class AuthService {
       );
 
       debugPrint(
-        'AuthService: OTP verification response - User: ${response.user?.id}',
+        'AuthService: OTP verification response - User: ${response.user?.id}, email confirmed: ${response.user?.emailConfirmedAt}',
       );
 
-      // Explicitly refresh the session after verification
+      // If we have a user but verification didn't mark the email as confirmed,
+      // we may need to refresh the session or try a different approach
       if (response.user != null) {
+        // First attempt: refresh the session
+        debugPrint(
+          'AuthService: Attempting to refresh session after OTP verification',
+        );
         try {
           final refreshResult = await _supabase.auth.refreshSession();
           debugPrint(
-            'AuthService: Session refreshed. User: ${refreshResult.user?.id}',
+            'AuthService: Session refreshed. User: ${refreshResult.user?.id}, Email confirmed: ${refreshResult.user?.emailConfirmedAt}',
           );
+
+          // If refreshing worked and email is now confirmed, return success
+          if (refreshResult.user?.emailConfirmedAt != null) {
+            return true;
+          }
         } catch (refreshError) {
           debugPrint('AuthService: Error refreshing session: $refreshError');
         }
+
+        // If we still don't have confirmation, try a deeper check
+        final isVerified = await isEmailVerified();
+        debugPrint(
+          'AuthService: Deep email verification check result: $isVerified',
+        );
+        return isVerified;
       }
 
+      // Fall back to checking if we have a user as a success indicator
       return response.user != null;
     } catch (e) {
       debugPrint('AuthService: Error verifying OTP: $e');
+
+      // Special handling for specific error messages that might still mean success
+      if (e.toString().contains('User already confirmed')) {
+        debugPrint(
+          'AuthService: User is already confirmed, treating as success',
+        );
+        return true;
+      }
+
       rethrow;
     }
   }
@@ -221,11 +269,36 @@ class AuthService {
     try {
       if (currentUser == null) return false;
 
+      debugPrint(
+        'Checking email verification status for user: ${currentUser?.id}',
+      );
+      debugPrint(
+        'Current email confirmed at: ${currentUser?.emailConfirmedAt}',
+      );
+
       // Refresh the session to get the latest user data
-      await _supabase.auth.refreshSession();
+      try {
+        final refreshResult = await _supabase.auth.refreshSession();
+        debugPrint(
+          'Session refreshed successfully. User: ${refreshResult.user?.id}',
+        );
+        debugPrint(
+          'Refreshed email confirmed at: ${refreshResult.user?.emailConfirmedAt}',
+        );
+      } catch (refreshError) {
+        debugPrint(
+          'Error refreshing session during email verification check: $refreshError',
+        );
+      }
+
+      // Get the current user again to have the most updated info
+      final updatedUser = _supabase.auth.currentUser;
+      debugPrint(
+        'Updated email confirmed at: ${updatedUser?.emailConfirmedAt}',
+      );
 
       // Check if email is confirmed
-      return currentUser?.emailConfirmedAt != null;
+      return updatedUser?.emailConfirmedAt != null;
     } catch (e) {
       debugPrint('Error checking email verification: $e');
       return false;
@@ -328,41 +401,180 @@ class AuthService {
     Map<String, dynamic> userData,
   ) async {
     try {
+      debugPrint(
+        'Creating user profile for userId: $userId with type: $userType',
+      );
+      debugPrint('User data: $userData');
+
       switch (userType) {
         case UserType.alumni:
-          await _supabase.from('user_alumni').insert({
-            'id': userId,
-            'first_name': userData['first_name'],
-            'last_name': userData['last_name'],
-            'email': userData['email'],
-            'birthdate': userData['birthdate'],
-            'graduation_year': userData['graduation_year'],
-            'university': userData['university'],
-            'experience': userData['experience'],
-          });
+          try {
+            // Check if profile already exists to prevent 409 conflict
+            debugPrint('Checking if alumni profile exists for userId: $userId');
+            final existing =
+                await _supabase
+                    .from('user_alumni')
+                    .select('id')
+                    .eq('id', userId)
+                    .maybeSingle();
+
+            debugPrint('Existing alumni check result: $existing');
+
+            // Only insert if no record exists
+            if (existing == null) {
+              debugPrint(
+                'No existing alumni record found. Creating new record...',
+              );
+              final insertData = {
+                'id': userId,
+                'first_name': userData['first_name'],
+                'last_name': userData['last_name'],
+                'email': userData['email'],
+                'birthdate': userData['birthdate'],
+                'graduation_year': userData['graduation_year'],
+                'university': userData['university'],
+                'experience': userData['experience'],
+              };
+
+              debugPrint('Alumni insert data: $insertData');
+
+              await _supabase.from('user_alumni').insert(insertData);
+              debugPrint('Alumni profile created successfully');
+            } else {
+              // Profile already exists, update it instead
+              debugPrint('Existing alumni record found. Updating record...');
+              await _supabase
+                  .from('user_alumni')
+                  .update({
+                    'first_name': userData['first_name'],
+                    'last_name': userData['last_name'],
+                    'email': userData['email'],
+                    'birthdate': userData['birthdate'],
+                    'graduation_year': userData['graduation_year'],
+                    'university': userData['university'],
+                    'experience': userData['experience'],
+                  })
+                  .eq('id', userId);
+              debugPrint('Alumni profile updated successfully');
+            }
+          } catch (alumniError) {
+            debugPrint('Error in alumni profile creation: $alumniError');
+            rethrow;
+          }
           break;
 
         case UserType.company:
-          await _supabase.from('user_companies').insert({
-            'id': userId,
-            'company_name': userData['company_name'],
-            'email': userData['email'],
-          });
+          try {
+            // Check if profile already exists to prevent 409 conflict
+            debugPrint(
+              'Checking if company profile exists for userId: $userId',
+            );
+            final existingCompany =
+                await _supabase
+                    .from('user_companies')
+                    .select('id')
+                    .eq('id', userId)
+                    .maybeSingle();
+
+            debugPrint('Existing company check result: $existingCompany');
+
+            // Only insert if no record exists
+            if (existingCompany == null) {
+              debugPrint(
+                'No existing company record found. Creating new record...',
+              );
+              final insertData = {
+                'id': userId,
+                'company_name': userData['company_name'],
+                'email': userData['email'],
+              };
+
+              debugPrint('Company insert data: $insertData');
+
+              await _supabase.from('user_companies').insert(insertData);
+              debugPrint('Company profile created successfully');
+            } else {
+              // Profile already exists, update it instead
+              debugPrint('Existing company record found. Updating record...');
+              await _supabase
+                  .from('user_companies')
+                  .update({
+                    'company_name': userData['company_name'],
+                    'email': userData['email'],
+                  })
+                  .eq('id', userId);
+              debugPrint('Company profile updated successfully');
+            }
+          } catch (companyError) {
+            debugPrint('Error in company profile creation: $companyError');
+            rethrow;
+          }
           break;
 
         case UserType.contentCreator:
-          await _supabase.from('user_content_creators').insert({
-            'id': userId,
-            'first_name': userData['first_name'],
-            'last_name': userData['last_name'],
-            'email': userData['email'],
-            'birthdate': userData['birthdate'],
-            'bio': userData['bio'],
-            'phone': userData['phone'],
-          });
+          try {
+            // Check if profile already exists to prevent 409 conflict
+            debugPrint(
+              'Checking if content creator profile exists for userId: $userId',
+            );
+            final existingCreator =
+                await _supabase
+                    .from('user_content_creators')
+                    .select('id')
+                    .eq('id', userId)
+                    .maybeSingle();
+
+            debugPrint(
+              'Existing content creator check result: $existingCreator',
+            );
+
+            // Only insert if no record exists
+            if (existingCreator == null) {
+              debugPrint(
+                'No existing content creator record found. Creating new record...',
+              );
+              final insertData = {
+                'id': userId,
+                'first_name': userData['first_name'],
+                'last_name': userData['last_name'],
+                'email': userData['email'],
+                'birthdate': userData['birthdate'],
+                'bio': userData['bio'],
+                'phone': userData['phone'],
+              };
+
+              debugPrint('Content creator insert data: $insertData');
+
+              await _supabase.from('user_content_creators').insert(insertData);
+              debugPrint('Content creator profile created successfully');
+            } else {
+              // Profile already exists, update it instead
+              debugPrint(
+                'Existing content creator record found. Updating record...',
+              );
+              await _supabase
+                  .from('user_content_creators')
+                  .update({
+                    'first_name': userData['first_name'],
+                    'last_name': userData['last_name'],
+                    'email': userData['email'],
+                    'birthdate': userData['birthdate'],
+                    'bio': userData['bio'],
+                    'phone': userData['phone'],
+                  })
+                  .eq('id', userId);
+              debugPrint('Content creator profile updated successfully');
+            }
+          } catch (creatorError) {
+            debugPrint(
+              'Error in content creator profile creation: $creatorError',
+            );
+            rethrow;
+          }
           break;
 
         default:
+          debugPrint('Unknown user type: $userType');
           break;
       }
     } catch (e) {
@@ -399,15 +611,80 @@ class AuthService {
   String _getUserTypeString(UserType userType) {
     switch (userType) {
       case UserType.admin:
-        return 'user_admin';
+        return 'admin';
       case UserType.alumni:
-        return 'user_alumni';
+        return 'alumni';
       case UserType.company:
-        return 'user_company';
+        return 'company';
       case UserType.contentCreator:
-        return 'user_content_creator';
+        return 'content_creator';
       default:
-        return 'user_student'; // Default fallback
+        return 'alumni'; // Default fallback
+    }
+  }
+
+  // Check if a user with a given email already exists
+  Future<bool> checkExistingUser(String email) async {
+    try {
+      debugPrint('Checking if user exists with email: $email');
+      final response = await _supabase.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: false,
+      );
+
+      // If OTP email is sent successfully, the user exists
+      debugPrint('User exists check response: OTP sent successfully');
+
+      return true; // User exists if we get here
+    } catch (e) {
+      if (e.toString().contains('Email not confirmed')) {
+        // Email exists but not confirmed
+        return true;
+      } else if (e.toString().contains('Invalid login credentials')) {
+        // User doesn't exist
+        return false;
+      }
+      // For any other error, assume the user might exist
+      debugPrint('Error checking if user exists: $e');
+      return false;
+    }
+  }
+
+  // Diagnose RLS policy issues
+  Future<Map<String, bool>> diagnosePolicyIssues() async {
+    Map<String, bool> results = {
+      'user_alumni': false,
+      'user_companies': false,
+      'user_content_creators': false,
+    };
+
+    try {
+      // Test if we can read tables (any access would mean RLS is likely not the culprit)
+      try {
+        await _supabase.from('user_alumni').select('id').limit(1);
+        results['user_alumni'] = true;
+      } catch (e) {
+        debugPrint('Alumni table access check failed: $e');
+      }
+
+      try {
+        await _supabase.from('user_companies').select('id').limit(1);
+        results['user_companies'] = true;
+      } catch (e) {
+        debugPrint('Companies table access check failed: $e');
+      }
+
+      try {
+        await _supabase.from('user_content_creators').select('id').limit(1);
+        results['user_content_creators'] = true;
+      } catch (e) {
+        debugPrint('Content creators table access check failed: $e');
+      }
+
+      return results;
+    } catch (e) {
+      debugPrint('Error diagnosing policy issues: $e');
+      return results;
     }
   }
 }

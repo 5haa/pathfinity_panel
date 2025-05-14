@@ -56,7 +56,12 @@ class _UserTypeSelectorState extends State<UserTypeSelector> {
 
   @override
   void dispose() {
-    _removeDropdownOverlay();
+    // Don't call setState in dispose - just remove the overlay if it exists
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      // Don't call setState here!
+    }
     super.dispose();
   }
 
@@ -69,11 +74,20 @@ class _UserTypeSelectorState extends State<UserTypeSelector> {
   }
 
   void _removeDropdownOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    setState(() {
-      _isDropdownOpen = false;
-    });
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+
+      // Only call setState if the widget is still mounted
+      if (mounted) {
+        setState(() {
+          _isDropdownOpen = false;
+        });
+      } else {
+        // Just update the variable without setState if not mounted
+        _isDropdownOpen = false;
+      }
+    }
   }
 
   void _showDropdownOverlay() {

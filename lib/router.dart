@@ -24,6 +24,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/services/auth_service.dart';
 import 'package:admin_panel/screens/admin/gift_card_management_screen.dart';
 import 'package:admin_panel/screens/admin/category_management_screen.dart';
+import 'package:admin_panel/screens/auth/waiting_approval_screen.dart';
 
 // Custom page transition
 class FadeTransitionPage extends CustomTransitionPage<void> {
@@ -54,6 +55,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isVerifyEmailRoute = state.matchedLocation.startsWith(
         '/verify-email',
       );
+      final isWaitingApprovalRoute =
+          state.matchedLocation == '/waiting-approval';
       final isForgotPasswordRoute = state.matchedLocation == '/forgot-password';
       final isResetPasswordOtpRoute = state.matchedLocation.startsWith(
         '/reset-password-otp',
@@ -68,47 +71,77 @@ final routerProvider = Provider<GoRouter>((ref) {
           !isLoginRoute &&
           !isRegisterRoute &&
           !isVerifyEmailRoute &&
+          !isWaitingApprovalRoute &&
           !isForgotPasswordRoute &&
           !isResetPasswordOtpRoute) {
         debugPrint('Router redirect - Not logged in, redirecting to login');
         return '/login';
       }
 
-      // If logged in and on login or register page, redirect to dashboard
-      if (loggedIn && (isLoginRoute || isRegisterRoute)) {
-        // Get user type to determine which dashboard to show
+      // Check if user is logged in but not approved
+      if (loggedIn) {
         final userTypeInfo = ref.read(userTypeInfoProvider);
-        debugPrint(
-          'Router redirect - Logged in user with type: ${userTypeInfo?.userType}',
-        );
+        final isEmailVerified =
+            await ref.read(authProvider.notifier).isEmailVerified();
+        debugPrint('Router redirect - Email verified: $isEmailVerified');
 
-        if (userTypeInfo == null) {
-          // If user type info is not available, sign out and redirect to login
-          debugPrint('Router redirect - No user type info, signing out');
-          await authNotifier.signOut();
-          return '/login';
+        // Redirect to OTP verification if email is not verified
+        if (!isEmailVerified && !isVerifyEmailRoute) {
+          final user = ref.read(currentUserProvider);
+          if (user != null) {
+            debugPrint(
+              'Router redirect - Email not verified, redirecting to OTP screen',
+            );
+            return '/verify-email?email=${Uri.encodeComponent(user.email ?? "")}';
+          }
         }
 
-        switch (userTypeInfo.userType) {
-          case UserType.admin:
-            debugPrint('Router redirect - Redirecting to admin dashboard');
-            return '/admin';
-          case UserType.alumni:
-            debugPrint('Router redirect - Redirecting to alumni dashboard');
-            return '/alumni/chat';
-          case UserType.company:
-            debugPrint('Router redirect - Redirecting to company dashboard');
-            return '/company';
-          case UserType.contentCreator:
-            debugPrint(
-              'Router redirect - Redirecting to content creator dashboard',
-            );
-            return '/content-creator';
-          default:
-            // If user type is unknown, sign out and redirect to login
-            debugPrint('Router redirect - Unknown user type, signing out');
+        // Only redirect to waiting approval if email is verified
+        if (userTypeInfo != null &&
+            !userTypeInfo.isApproved &&
+            !isWaitingApprovalRoute &&
+            isEmailVerified) {
+          debugPrint(
+            'Router redirect - User not approved, redirecting to waiting approval',
+          );
+          return '/waiting-approval';
+        }
+
+        // If logged in and on login or register page, redirect to dashboard
+        if (isLoginRoute || isRegisterRoute) {
+          // Get user type to determine which dashboard to show
+          debugPrint(
+            'Router redirect - Logged in user with type: ${userTypeInfo?.userType}',
+          );
+
+          if (userTypeInfo == null) {
+            // If user type info is not available, sign out and redirect to login
+            debugPrint('Router redirect - No user type info, signing out');
             await authNotifier.signOut();
             return '/login';
+          }
+
+          switch (userTypeInfo.userType) {
+            case UserType.admin:
+              debugPrint('Router redirect - Redirecting to admin dashboard');
+              return '/admin';
+            case UserType.alumni:
+              debugPrint('Router redirect - Redirecting to alumni dashboard');
+              return '/alumni/chat';
+            case UserType.company:
+              debugPrint('Router redirect - Redirecting to company dashboard');
+              return '/company';
+            case UserType.contentCreator:
+              debugPrint(
+                'Router redirect - Redirecting to content creator dashboard',
+              );
+              return '/content-creator';
+            default:
+              // If user type is unknown, sign out and redirect to login
+              debugPrint('Router redirect - Unknown user type, signing out');
+              await authNotifier.signOut();
+              return '/login';
+          }
         }
       }
 
@@ -605,6 +638,28 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CustomTransitionPage(
             key: state.pageKey,
             child: const ScheduleLiveScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+
+      // Add the waiting approval route
+      GoRoute(
+        path: '/waiting-approval',
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const WaitingApprovalScreen(),
             transitionsBuilder: (
               context,
               animation,

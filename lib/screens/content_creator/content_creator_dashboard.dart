@@ -205,7 +205,7 @@ class _ContentCreatorDashboardState
 
     try {
       final creatorService = ref.read(contentCreatorServiceProvider);
-      final courseId = await creatorService.createCourse(
+      final courseId = await creatorService.createCourseWithThumbnail(
         creatorId: _creatorUser!.id,
         title: _courseTitleController.text.trim(),
         description: _courseDescriptionController.text.trim(),
@@ -919,7 +919,29 @@ class _ContentCreatorDashboardState
 
   Widget _buildCourseCard(Map<String, dynamic> course) {
     final bool isActive = course['is_active'] ?? false;
-    final bool isApproved = course['is_approved'] ?? false;
+    final dynamic isApprovedValue = course['is_approved'];
+
+    // Handle the approval status correctly
+    String statusText;
+    Color statusColor;
+    bool showRejectionReason = false;
+
+    if (isApprovedValue == null) {
+      // Pending status
+      statusText = 'Pending';
+      statusColor = AppTheme.warningColor;
+    } else if (isApprovedValue == true) {
+      // Approved status
+      statusText = 'Approved';
+      statusColor = AppTheme.successColor;
+    } else {
+      // Rejected status
+      statusText = 'Rejected';
+      statusColor = AppTheme.errorColor;
+      showRejectionReason = true;
+    }
+
+    final String? rejectionReason = course['rejection_reason'];
     final categoryData = course['course_categories'];
     final String categoryName =
         categoryData != null
@@ -952,16 +974,13 @@ class _ContentCreatorDashboardState
                   children: [
                     Chip(
                       label: Text(
-                        isApproved ? 'Approved' : 'Pending',
+                        statusText,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                         ),
                       ),
-                      backgroundColor:
-                          isApproved
-                              ? AppTheme.successColor
-                              : AppTheme.warningColor,
+                      backgroundColor: statusColor,
                     ),
                     const SizedBox(width: 8),
                     Chip(
@@ -986,6 +1005,51 @@ class _ContentCreatorDashboardState
               course['description'] ?? 'No description provided',
               style: const TextStyle(color: AppTheme.textColor),
             ),
+            // Display rejection reason if course is rejected
+            if (showRejectionReason && rejectionReason != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppTheme.errorColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Rejection Reason:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.errorColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            rejectionReason,
+                            style: const TextStyle(
+                              color: AppTheme.textColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             LayoutBuilder(
               builder: (context, constraints) {
@@ -1030,7 +1094,7 @@ class _ContentCreatorDashboardState
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (isApproved && isActive)
+                if (isApprovedValue == true && isActive)
                   CustomButton(
                     text: 'Go Live',
                     onPressed: () {

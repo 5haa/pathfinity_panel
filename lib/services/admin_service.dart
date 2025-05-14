@@ -385,7 +385,6 @@ class AdminService {
         updateData['category_id'] = courseChange['category_id'];
 
       // Update approval status
-      updateData['is_reviewed'] = true;
       updateData['is_approved'] = true;
       updateData['rejection_reason'] =
           null; // Clear any previous rejection reason
@@ -425,11 +424,7 @@ class AdminService {
       // Update the course's status in courses table
       await _supabase
           .from('courses')
-          .update({
-            'is_reviewed': true,
-            'is_approved': false,
-            'rejection_reason': reason,
-          })
+          .update({'is_approved': false, 'rejection_reason': reason})
           .eq('id', courseId);
 
       // Mark the change as reviewed and rejected
@@ -549,10 +544,22 @@ class AdminService {
   // Approve a course
   Future<bool> approveCourse(String courseId) async {
     try {
+      // First approve the course
       await _supabase
           .from('courses')
           .update({'is_approved': true})
           .eq('id', courseId);
+
+      // Then approve all videos in this course
+      await _supabase
+          .from('course_videos')
+          .update({
+            'is_approved': true,
+            'is_reviewed': true,
+            'rejection_reason': null,
+          })
+          .eq('course_id', courseId);
+
       return true;
     } catch (e) {
       debugPrint('Error approving course: $e');
@@ -565,7 +572,11 @@ class AdminService {
     try {
       await _supabase
           .from('courses')
-          .update({'is_approved': false, 'rejection_reason': reason})
+          .update({
+            'is_approved': false,
+            'is_reviewed': true,
+            'rejection_reason': reason,
+          })
           .eq('id', courseId);
       return true;
     } catch (e) {
@@ -682,6 +693,42 @@ class AdminService {
       return true;
     } catch (e) {
       debugPrint('Error rejecting internship: $e');
+      return false;
+    }
+  }
+
+  // Approve a course video
+  Future<bool> approveCourseVideo(String videoId) async {
+    try {
+      await _supabase
+          .from('course_videos')
+          .update({
+            'is_approved': true,
+            'is_reviewed': true,
+            'rejection_reason': null, // Clear any previous rejection reason
+          })
+          .eq('id', videoId);
+      return true;
+    } catch (e) {
+      debugPrint('Error approving course video: $e');
+      return false;
+    }
+  }
+
+  // Reject a course video with a reason
+  Future<bool> rejectCourseVideo(String videoId, String reason) async {
+    try {
+      await _supabase
+          .from('course_videos')
+          .update({
+            'is_approved': false,
+            'is_reviewed': true,
+            'rejection_reason': reason,
+          })
+          .eq('id', videoId);
+      return true;
+    } catch (e) {
+      debugPrint('Error rejecting course video: $e');
       return false;
     }
   }

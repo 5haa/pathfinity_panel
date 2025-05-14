@@ -19,6 +19,7 @@ import 'package:admin_panel/widgets/course/course_form.dart';
 import 'package:admin_panel/widgets/course/empty_state.dart';
 import 'package:admin_panel/widgets/course/filter_chips.dart';
 import 'package:admin_panel/widgets/course/thumbnail_selector.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final contentCreatorServiceProvider = Provider<ContentCreatorService>(
   (ref) => ContentCreatorService(),
@@ -42,6 +43,8 @@ class ContentCreatorCoursesTab extends ConsumerStatefulWidget {
 
 class _ContentCreatorCoursesTabState
     extends ConsumerState<ContentCreatorCoursesTab> {
+  final _supabase = Supabase.instance.client;
+
   ContentCreatorUser? _contentCreatorUser;
   bool _isLoading = true;
   List<Map<String, dynamic>> _courses = [];
@@ -222,26 +225,15 @@ class _ContentCreatorCoursesTabState
     try {
       final contentCreatorService = ref.read(contentCreatorServiceProvider);
 
-      // TODO: In a real implementation, upload the thumbnail file first and get the URL
-      String? thumbnailUrl;
-
-      // This would be replaced with actual file upload logic
-      if (_thumbnailFile != null) {
-        // Simulate upload delay
-        await Future.delayed(const Duration(seconds: 1));
-        // In real implementation: thumbnailUrl = await uploadService.uploadFile(_thumbnailFile!);
-        thumbnailUrl =
-            'https://example.com/sample-thumbnail.jpg'; // Placeholder
-      }
-
-      final courseId = await contentCreatorService.createCourse(
+      // Use the new method that handles thumbnail upload
+      final courseId = await contentCreatorService.createCourseWithThumbnail(
         creatorId: _contentCreatorUser!.id,
         title: _courseTitleController.text.trim(),
         description: _courseDescriptionController.text.trim(),
         categoryId: _selectedCategoryId,
         membershipType: _selectedMembershipType,
         difficulty: _selectedDifficulty,
-        // Add thumbnailUrl here in a real implementation
+        thumbnailFile: _thumbnailFile,
       );
 
       if (courseId != null) {
@@ -402,77 +394,40 @@ class _ContentCreatorCoursesTabState
     try {
       final contentCreatorService = ref.read(contentCreatorServiceProvider);
 
-      // TODO: In a real implementation, upload the thumbnail file first and get the URL
-      String? thumbnailUrl;
+      // Find current course data
+      final course = _courses.firstWhere((c) => c['id'] == courseId);
+      final currentThumbnailUrl = course['thumbnail_url'] as String?;
 
-      // This would be replaced with actual file upload logic
-      if (_thumbnailFile != null) {
-        // Simulate upload delay
-        await Future.delayed(const Duration(seconds: 1));
-        // In real implementation: thumbnailUrl = await uploadService.uploadFile(_thumbnailFile!);
-        thumbnailUrl =
-            'https://example.com/sample-updated-thumbnail.jpg'; // Placeholder
-      }
-
-      // In a real app, you would call a service to update the course
+      // Use the updated requestCourseChanges method that handles thumbnails
       final success = await contentCreatorService.requestCourseChanges(
         courseId: courseId,
         title: _courseTitleController.text.trim(),
         description: _courseDescriptionController.text.trim(),
         categoryId: _selectedCategoryId,
+        thumbnailFile: _thumbnailFile,
+        creatorId: _contentCreatorUser?.id,
+        currentThumbnailUrl: currentThumbnailUrl,
       );
 
-      // Update membership type and difficulty directly (assuming direct update is allowed)
-      // Note: This would require an additional service method in a real app
-      final course = _courses.firstWhere((c) => c['id'] == courseId);
-      course['membership_type'] = _selectedMembershipType;
-      course['difficulty'] = _selectedDifficulty;
-
-      if (thumbnailUrl != null) {
-        course['thumbnail_url'] = thumbnailUrl;
-      }
-
+      // Update membership type and difficulty directly
       if (success) {
-        // Update the local course data
-        for (var i = 0; i < _courses.length; i++) {
-          if (_courses[i]['id'] == courseId) {
-            _courses[i]['title'] = _courseTitleController.text;
-            _courses[i]['description'] = _courseDescriptionController.text;
-            _courses[i]['category_id'] = _selectedCategoryId;
-            _courses[i]['membership_type'] = _selectedMembershipType;
-            _courses[i]['difficulty'] = _selectedDifficulty;
+        await _supabase
+            .from('courses')
+            .update({
+              'membership_type': _selectedMembershipType,
+              'difficulty': _selectedDifficulty,
+            })
+            .eq('id', courseId);
 
-            if (thumbnailUrl != null) {
-              _courses[i]['thumbnail_url'] = thumbnailUrl;
-            }
-
-            // Update category object if needed
-            if (_selectedCategoryId != null) {
-              final category = _categories.firstWhere(
-                (c) => c.id == _selectedCategoryId,
-                orElse:
-                    () => CourseCategory(
-                      id: '',
-                      name: 'Unknown',
-                      createdAt: DateTime.now(),
-                      updatedAt: DateTime.now(),
-                    ),
-              );
-              _courses[i]['category'] = category.toJson();
-            }
-          }
-        }
+        // Reload courses instead of manually updating the UI
+        await _loadCourses();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Course "${_courseTitleController.text}" updated successfully',
-            ),
+          const SnackBar(
+            content: Text('Course updated successfully'),
             backgroundColor: AppTheme.successColor,
           ),
         );
-
-        setState(() {}); // Refresh UI
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

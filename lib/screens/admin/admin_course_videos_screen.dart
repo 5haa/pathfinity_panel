@@ -100,10 +100,22 @@ class _AdminCourseVideosScreenState
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            context.go(
-              '/admin/courses/${widget.courseId}/management',
-              extra: {'courseTitle': widget.courseTitle},
-            );
+            // Ensure we always include the courseTitle in the navigation
+            final String courseTitle =
+                widget.courseTitle.isNotEmpty
+                    ? widget.courseTitle
+                    : 'Course Details';
+
+            try {
+              context.go(
+                '/admin/courses/${widget.courseId}/management',
+                extra: {'courseTitle': courseTitle},
+              );
+            } catch (e) {
+              // Fallback navigation in case of routing issues
+              debugPrint('Navigation error: $e');
+              context.go('/admin');
+            }
           },
         ),
         actions: [
