@@ -303,22 +303,53 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
 
     try {
       final courseVideoService = ref.read(courseVideoServiceProvider);
-      final success = await courseVideoService.updateCourseVideoWithFile(
-        videoId: _selectedVideo!.id,
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
+
+      // Check if any changes were made
+      bool hasChanges =
+          _selectedVideoFile != null ||
+          _selectedThumbnailFile != null ||
+          _titleController.text.trim() != _selectedVideo!.title ||
+          _descriptionController.text.trim() != _selectedVideo!.description ||
+          _isFreePreview != _selectedVideo!.isFreePreview;
+
+      if (!hasChanges) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No changes detected'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+          _isUploading = false;
+        });
+        return;
+      }
+
+      // Request video changes instead of directly updating
+      final success = await courseVideoService.requestVideoChangesWithFile(
+        courseVideoId: _selectedVideo!.id,
+        title:
+            _titleController.text.trim() != _selectedVideo!.title
+                ? _titleController.text.trim()
+                : null,
+        description:
+            _descriptionController.text.trim() != _selectedVideo!.description
+                ? _descriptionController.text.trim()
+                : null,
         newVideoFile: _selectedVideoFile,
         newThumbnailFile: _selectedThumbnailFile,
-        isFreePreview: _isFreePreview,
+        isFreePreview:
+            _isFreePreview != _selectedVideo!.isFreePreview
+                ? _isFreePreview
+                : null,
         creatorId: _currentUserId!,
-        currentVideoUrl: _selectedVideo!.videoUrl,
-        currentThumbnailUrl: _selectedVideo!.thumbnailUrl,
       );
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Video updated successfully'),
+            content: Text('Video changes submitted for approval'),
             backgroundColor: AppTheme.successColor,
           ),
         );
@@ -328,15 +359,15 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Failed to update video. Please check storage bucket configuration.',
+              'Failed to submit video changes. Please check storage bucket configuration.',
             ),
             backgroundColor: AppTheme.errorColor,
           ),
         );
       }
     } catch (e) {
-      debugPrint('Error updating video: $e');
-      String errorMessage = 'An error occurred while updating video';
+      debugPrint('Error submitting video changes: $e');
+      String errorMessage = 'An error occurred while submitting video changes';
 
       // Check for common storage errors
       if (e.toString().contains('Bucket not found')) {
@@ -417,63 +448,6 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _handleReorder(int oldIndex, int newIndex) async {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
-    final CourseVideo item = _videos.removeAt(oldIndex);
-    _videos.insert(newIndex, item);
-
-    setState(() {}); // Optimistic update for UI
-
-    // The sequence numbers in the _videos list are implicitly updated by reordering.
-    // The CourseVideo objects themselves retain their original sequenceNumber from the DB
-    // until a successful refresh (_loadVideos).
-    // The map sent to the service should reflect the new visual order.
-
-    final List<Map<String, dynamic>> videoSequences =
-        _videos.asMap().entries.map((entry) {
-          int idx = entry.key;
-          CourseVideo video = entry.value;
-          return {
-            'id': video.id,
-            'sequence_number':
-                idx + 1, // New sequence based on current list order
-          };
-        }).toList();
-
-    try {
-      final courseVideoService = ref.read(courseVideoServiceProvider);
-      final success = await courseVideoService.updateVideoSequence(
-        widget.courseId,
-        videoSequences,
-      );
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Video order updated successfully.'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-        _loadVideos(); // Refresh from server to get consistent data including new sequence numbers
-      } else {
-        _loadVideos(); // Revert to server state if update failed
-      }
-    } catch (e) {
-      debugPrint('Error reordering videos: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('An error occurred while reordering videos'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-        await _loadVideos(); // Reload to get original order
-      }
     }
   }
 
@@ -624,7 +598,7 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Drag videos to reorder lessons',
+                    'Videos are sequenced in order based on their addition',
                     style: TextStyle(fontSize: 14, color: AppTheme.textColor),
                   ),
                 ),
@@ -632,11 +606,31 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
             ),
           ),
         ),
-        ReorderableListView.builder(
+        Card(
+          elevation: 1,
+          margin: const EdgeInsets.only(bottom: 16),
+          color: Colors.blue.withOpacity(0.1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.approval, color: Colors.blue, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Any changes to videos will be submitted for admin approval before they appear to students',
+                    style: TextStyle(fontSize: 14, color: AppTheme.textColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _videos.length,
-          onReorder: _handleReorder,
           itemBuilder: (context, index) {
             final video = _videos[index];
             return _buildVideoCard(video, index);
@@ -651,7 +645,6 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
     final bool isReviewed = video.isReviewed ?? false;
 
     return Card(
-      key: ValueKey(video.id),
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1249,14 +1242,14 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
                                         Text(
                                           _isAddingVideo
                                               ? 'Uploading...'
-                                              : 'Updating...',
+                                              : 'Submitting Changes...',
                                         ),
                                       ],
                                     )
                                     : Text(
                                       _isAddingVideo
                                           ? 'Add Video'
-                                          : 'Update Video',
+                                          : 'Submit Changes',
                                     ),
                           ),
                         ],
