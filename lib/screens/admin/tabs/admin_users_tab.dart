@@ -176,6 +176,8 @@ class _AdminUsersTabState extends ConsumerState<AdminUsersTab>
             margin: const EdgeInsets.only(top: 16),
             child: TabBar(
               controller: _tabController,
+              isScrollable: true,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
               tabs: const [
                 Tab(text: 'Admins'),
                 Tab(text: 'Alumni'),
@@ -186,9 +188,13 @@ class _AdminUsersTabState extends ConsumerState<AdminUsersTab>
               unselectedLabelColor: AppTheme.textLightColor,
               indicatorColor: AppTheme.accentColor,
               indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
               unselectedLabelStyle: const TextStyle(
                 fontWeight: FontWeight.normal,
+                fontSize: 14,
               ),
             ),
           ),

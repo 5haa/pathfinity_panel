@@ -5,7 +5,8 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/widgets/bottom_nav_scaffold.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_dashboard_tab.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_users_tab.dart';
-import 'package:admin_panel/screens/admin/tabs/admin_content_tab.dart';
+import 'package:admin_panel/screens/admin/tabs/admin_courses_tab.dart';
+import 'package:admin_panel/screens/admin/tabs/admin_internships_tab.dart';
 import 'package:admin_panel/screens/admin/tabs/admin_profile_tab.dart';
 import 'package:admin_panel/config/theme.dart';
 
@@ -84,14 +85,30 @@ class _AdminMainScreenState extends ConsumerState<AdminMainScreen> {
             height: 24,
             alignment: Alignment.center,
             child: Image.asset(
-              'assets/content.png',
+              'assets/course.png',
               width: 20,
               height: 20,
               fit: BoxFit.contain,
             ),
           ),
           isIconData: false,
-          screen: const AdminContentTab(),
+          screen: const AdminCoursesTab(),
+        ),
+        BottomNavItem(
+          label: 'Internships',
+          icon: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            child: Image.asset(
+              'assets/internships.png',
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          ),
+          isIconData: false,
+          screen: const AdminInternshipsTab(),
         ),
         BottomNavItem(
           label: 'Profile',

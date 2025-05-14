@@ -7,6 +7,8 @@ import 'package:admin_panel/screens/auth/otp_verification_screen.dart';
 import 'package:admin_panel/screens/auth/forgot_password_screen.dart';
 import 'package:admin_panel/screens/auth/reset_password_otp_screen.dart';
 import 'package:admin_panel/screens/admin/admin_main_screen.dart';
+import 'package:admin_panel/screens/admin/admin_course_management_screen.dart';
+import 'package:admin_panel/screens/admin/admin_course_videos_screen.dart';
 import 'package:admin_panel/screens/alumni/alumni_main_screen.dart';
 import 'package:admin_panel/screens/alumni/student_profile_screen.dart';
 import 'package:admin_panel/screens/alumni/chat_screen.dart';
@@ -266,6 +268,62 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CustomTransitionPage(
             key: state.pageKey,
             child: const GiftCardManagementScreen(),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/courses/:courseId/management',
+        pageBuilder: (context, state) {
+          final courseId = state.pathParameters['courseId'] ?? '';
+          final Map<String, dynamic>? extra =
+              state.extra as Map<String, dynamic>?;
+          final courseTitle = extra?['courseTitle'] as String? ?? 'Course';
+
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: AdminCourseManagementScreen(
+              courseId: courseId,
+              courseTitle: courseTitle,
+            ),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) {
+              return FadeTransition(
+                opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/courses/:courseId/videos',
+        pageBuilder: (context, state) {
+          final courseId = state.pathParameters['courseId'] ?? '';
+          final Map<String, dynamic>? extra =
+              state.extra as Map<String, dynamic>?;
+          final courseTitle = extra?['courseTitle'] as String? ?? 'Course';
+
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: AdminCourseVideosScreen(
+              courseId: courseId,
+              courseTitle: courseTitle,
+            ),
             transitionsBuilder: (
               context,
               animation,

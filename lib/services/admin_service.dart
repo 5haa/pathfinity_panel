@@ -5,6 +5,8 @@ import 'package:admin_panel/models/alumni_model.dart';
 import 'package:admin_panel/models/company_model.dart';
 import 'package:admin_panel/models/content_creator_model.dart';
 import 'package:admin_panel/models/course_model.dart';
+import 'package:admin_panel/models/course_change_model.dart';
+import 'package:admin_panel/models/video_change_model.dart';
 
 class AdminService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -257,6 +259,293 @@ class AdminService {
     }
   }
 
+  // Get course details with videos
+  Future<Map<String, dynamic>?> getCourseWithVideos(String courseId) async {
+    try {
+      final List<dynamic> result = await _supabase
+          .from('courses')
+          .select('''
+            *,
+            course_categories(*),
+            creator:creator_id(
+              id,
+              first_name,
+              last_name,
+              email
+            ),
+            course_videos(*)
+          ''')
+          .eq('id', courseId)
+          .order('created_at', ascending: false);
+
+      if (result.isEmpty) {
+        return null;
+      }
+
+      return Map<String, dynamic>.from(result.first);
+    } catch (e) {
+      debugPrint('Error getting course with videos: $e');
+      return null;
+    }
+  }
+
+  // Get pending course changes
+  Future<List<Map<String, dynamic>>> getPendingCourseChanges() async {
+    try {
+      final data = await _supabase
+          .from('course_changes')
+          .select('''
+            *,
+            course:course_id(
+              id,
+              title,
+              description,
+              creator_id,
+              category_id,
+              course_categories(*),
+              creator:creator_id(
+                id,
+                first_name,
+                last_name,
+                email
+              )
+            )
+          ''')
+          .eq('is_reviewed', false)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('Error getting pending course changes: $e');
+      return [];
+    }
+  }
+
+  // Get pending video changes
+  Future<List<Map<String, dynamic>>> getPendingVideoChanges() async {
+    try {
+      final data = await _supabase
+          .from('video_changes')
+          .select('''
+            *,
+            course_video:course_video_id(
+              id,
+              course_id,
+              title,
+              description,
+              video_url,
+              thumbnail_url,
+              is_free_preview,
+              course:course_id(
+                id,
+                title,
+                creator_id,
+                creator:creator_id(
+                  id,
+                  first_name,
+                  last_name,
+                  email
+                )
+              )
+            )
+          ''')
+          .eq('is_reviewed', false)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('Error getting pending video changes: $e');
+      return [];
+    }
+  }
+
+  // Approve a course change
+  Future<bool> approveCourseChange(String courseChangeId) async {
+    try {
+      // First, get the change details
+      final List<dynamic> result = await _supabase
+          .from('course_changes')
+          .select('*')
+          .eq('id', courseChangeId);
+
+      if (result.isEmpty) {
+        return false;
+      }
+
+      final courseChange = Map<String, dynamic>.from(result.first);
+      final courseId = courseChange['course_id'];
+
+      // Update course with the changes
+      final updateData = <String, dynamic>{};
+      if (courseChange['title'] != null)
+        updateData['title'] = courseChange['title'];
+      if (courseChange['description'] != null)
+        updateData['description'] = courseChange['description'];
+      if (courseChange['category_id'] != null)
+        updateData['category_id'] = courseChange['category_id'];
+
+      // Update approval status
+      updateData['is_reviewed'] = true;
+      updateData['is_approved'] = true;
+      updateData['rejection_reason'] =
+          null; // Clear any previous rejection reason
+
+      // Update the course
+      await _supabase.from('courses').update(updateData).eq('id', courseId);
+
+      // Mark the change as reviewed and approved
+      await _supabase
+          .from('course_changes')
+          .update({'is_reviewed': true, 'is_approved': true})
+          .eq('id', courseChangeId);
+
+      return true;
+    } catch (e) {
+      debugPrint('Error approving course change: $e');
+      return false;
+    }
+  }
+
+  // Reject a course change
+  Future<bool> rejectCourseChange(String courseChangeId, String reason) async {
+    try {
+      // First, get the change details
+      final List<dynamic> result = await _supabase
+          .from('course_changes')
+          .select('*')
+          .eq('id', courseChangeId);
+
+      if (result.isEmpty) {
+        return false;
+      }
+
+      final courseChange = Map<String, dynamic>.from(result.first);
+      final courseId = courseChange['course_id'];
+
+      // Update the course's status in courses table
+      await _supabase
+          .from('courses')
+          .update({
+            'is_reviewed': true,
+            'is_approved': false,
+            'rejection_reason': reason,
+          })
+          .eq('id', courseId);
+
+      // Mark the change as reviewed and rejected
+      await _supabase
+          .from('course_changes')
+          .update({
+            'is_reviewed': true,
+            'is_approved': false,
+            'rejection_reason': reason,
+          })
+          .eq('id', courseChangeId);
+
+      return true;
+    } catch (e) {
+      debugPrint('Error rejecting course change: $e');
+      return false;
+    }
+  }
+
+  // Approve a video change
+  Future<bool> approveVideoChange(String videoChangeId) async {
+    try {
+      // First, get the change details
+      final List<dynamic> result = await _supabase
+          .from('video_changes')
+          .select('*')
+          .eq('id', videoChangeId);
+
+      if (result.isEmpty) {
+        return false;
+      }
+
+      final videoChange = Map<String, dynamic>.from(result.first);
+      final courseVideoId = videoChange['course_video_id'];
+
+      // Update video with the changes
+      final updateData = <String, dynamic>{};
+      if (videoChange['title'] != null)
+        updateData['title'] = videoChange['title'];
+      if (videoChange['description'] != null)
+        updateData['description'] = videoChange['description'];
+      if (videoChange['video_url'] != null)
+        updateData['video_url'] = videoChange['video_url'];
+      if (videoChange['thumbnail_url'] != null)
+        updateData['thumbnail_url'] = videoChange['thumbnail_url'];
+      if (videoChange['is_free_preview'] != null)
+        updateData['is_free_preview'] = videoChange['is_free_preview'];
+
+      // Update approval status
+      updateData['is_reviewed'] = true;
+      updateData['is_approved'] = true;
+      updateData['rejection_reason'] =
+          null; // Clear any previous rejection reason
+
+      // Update the video
+      await _supabase
+          .from('course_videos')
+          .update(updateData)
+          .eq('id', courseVideoId);
+
+      // Mark the change as reviewed and approved
+      await _supabase
+          .from('video_changes')
+          .update({'is_reviewed': true, 'is_approved': true})
+          .eq('id', videoChangeId);
+
+      return true;
+    } catch (e) {
+      debugPrint('Error approving video change: $e');
+      return false;
+    }
+  }
+
+  // Reject a video change
+  Future<bool> rejectVideoChange(String videoChangeId, String reason) async {
+    try {
+      // First, get the change details
+      final List<dynamic> result = await _supabase
+          .from('video_changes')
+          .select('*')
+          .eq('id', videoChangeId);
+
+      if (result.isEmpty) {
+        return false;
+      }
+
+      final videoChange = Map<String, dynamic>.from(result.first);
+      final courseVideoId = videoChange['course_video_id'];
+
+      // Update the video's status in course_videos table
+      await _supabase
+          .from('course_videos')
+          .update({
+            'is_reviewed': true,
+            'is_approved': false,
+            'rejection_reason': reason,
+          })
+          .eq('id', courseVideoId);
+
+      // Mark the change as reviewed and rejected
+      await _supabase
+          .from('video_changes')
+          .update({
+            'is_reviewed': true,
+            'is_approved': false,
+            'rejection_reason': reason,
+          })
+          .eq('id', videoChangeId);
+
+      return true;
+    } catch (e) {
+      debugPrint('Error rejecting video change: $e');
+      return false;
+    }
+  }
+
   // Approve a course
   Future<bool> approveCourse(String courseId) async {
     try {
@@ -345,6 +634,55 @@ class AdminService {
     } catch (e) {
       debugPrint('Error getting students: $e');
       return [];
+    }
+  }
+
+  // Get all internships with company information
+  Future<List<Map<String, dynamic>>> getAllInternships() async {
+    try {
+      final data = await _supabase
+          .from('internships')
+          .select('''
+            *,
+            company:company_id(
+              id,
+              company_name,
+              email
+            )
+          ''')
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('Error getting internships: $e');
+      return [];
+    }
+  }
+
+  // Approve an internship
+  Future<bool> approveInternship(String internshipId) async {
+    try {
+      await _supabase
+          .from('internships')
+          .update({'is_approved': true})
+          .eq('id', internshipId);
+      return true;
+    } catch (e) {
+      debugPrint('Error approving internship: $e');
+      return false;
+    }
+  }
+
+  // Reject an internship with a reason
+  Future<bool> rejectInternship(String internshipId, String reason) async {
+    try {
+      await _supabase
+          .from('internships')
+          .update({'is_approved': false, 'rejection_reason': reason})
+          .eq('id', internshipId);
+      return true;
+    } catch (e) {
+      debugPrint('Error rejecting internship: $e');
+      return false;
     }
   }
 }

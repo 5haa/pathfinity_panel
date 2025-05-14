@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart'; // Kept for debugPrint, can be removed if not used elsewhere
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:admin_panel/models/course_video_model.dart'; // Import the new model
+import 'package:admin_panel/models/video_change_model.dart'; // Import the video change model
 import 'package:path/path.dart' as path;
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added Riverpod
 import 'package:uuid/uuid.dart';
@@ -480,5 +481,84 @@ class CourseVideoService {
       debugPrint('Error deleting course video with file: $e');
       return false;
     }
+  }
+
+  // Request video changes
+  Future<bool> requestVideoChanges({
+    required String courseVideoId,
+    String? title,
+    String? description,
+    String? videoUrl,
+    String? thumbnailUrl,
+    bool? isFreePreview,
+  }) async {
+    try {
+      // Ensure at least one field is being changed
+      if (title == null &&
+          description == null &&
+          videoUrl == null &&
+          thumbnailUrl == null &&
+          isFreePreview == null) {
+        debugPrint('No changes provided for video change request');
+        return false;
+      }
+
+      await _supabase.from('video_changes').insert({
+        'course_video_id': courseVideoId,
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (videoUrl != null) 'video_url': videoUrl,
+        if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
+        if (isFreePreview != null) 'is_free_preview': isFreePreview,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error requesting video changes: $e');
+      return false;
+    }
+  }
+
+  // Request video changes with file upload
+  Future<bool> requestVideoChangesWithFile({
+    required String courseVideoId,
+    String? title,
+    String? description,
+    File? newVideoFile,
+    File? newThumbnailFile,
+    bool? isFreePreview,
+    required String creatorId,
+  }) async {
+    String? uploadedVideoUrl;
+    String? uploadedThumbnailUrl;
+
+    // Upload video if provided
+    if (newVideoFile != null) {
+      uploadedVideoUrl = await uploadVideo(newVideoFile, creatorId);
+      if (uploadedVideoUrl == null) {
+        debugPrint('Video upload failed. Cannot request video changes.');
+        return false;
+      }
+    }
+
+    // Upload thumbnail if provided
+    if (newThumbnailFile != null) {
+      uploadedThumbnailUrl = await uploadThumbnail(newThumbnailFile, creatorId);
+      if (uploadedThumbnailUrl == null) {
+        // Continue even if thumbnail upload fails
+        debugPrint(
+          'Thumbnail upload failed, but continuing with video change request',
+        );
+      }
+    }
+
+    // Request changes
+    return requestVideoChanges(
+      courseVideoId: courseVideoId,
+      title: title,
+      description: description,
+      videoUrl: uploadedVideoUrl,
+      thumbnailUrl: uploadedThumbnailUrl,
+      isFreePreview: isFreePreview,
+    );
   }
 }

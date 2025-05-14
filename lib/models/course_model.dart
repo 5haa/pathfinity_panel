@@ -25,6 +25,7 @@ class Course {
   final CourseCategory? category;
   final String membershipType; // Added for course membership type
   final String difficulty; // Added for course difficulty level
+  final String? thumbnailUrl; // Added for course thumbnail
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +41,7 @@ class Course {
     this.category,
     this.membershipType = MembershipType.pro, // Default to PRO
     this.difficulty = DifficultyLevel.medium, // Default to MEDIUM
+    this.thumbnailUrl,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -62,6 +64,7 @@ class Course {
               : null,
       membershipType: json['membership_type'] as String? ?? MembershipType.pro,
       difficulty: json['difficulty'] as String? ?? DifficultyLevel.medium,
+      thumbnailUrl: json['thumbnail_url'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -79,6 +82,7 @@ class Course {
       'category_id': categoryId,
       'membership_type': membershipType,
       'difficulty': difficulty,
+      'thumbnail_url': thumbnailUrl,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       if (category != null) 'category': category!.toJson(),
@@ -97,6 +101,7 @@ class Course {
     CourseCategory? category,
     String? membershipType,
     String? difficulty,
+    String? thumbnailUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -112,6 +117,7 @@ class Course {
       category: category ?? this.category,
       membershipType: membershipType ?? this.membershipType,
       difficulty: difficulty ?? this.difficulty,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
