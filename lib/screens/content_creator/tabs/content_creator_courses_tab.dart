@@ -424,14 +424,14 @@ class _ContentCreatorCoursesTabState
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Course updated successfully'),
+            content: Text('Course changes submitted for approval'),
             backgroundColor: AppTheme.successColor,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to update course'),
+            content: Text('Failed to submit course changes'),
             backgroundColor: AppTheme.errorColor,
           ),
         );

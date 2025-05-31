@@ -560,6 +560,23 @@ class AdminService {
           })
           .eq('course_id', courseId);
 
+      // Check for any pending course changes and apply them
+      final List<dynamic> pendingChanges = await _supabase
+          .from('course_changes')
+          .select()
+          .eq('course_id', courseId)
+          .eq('is_reviewed', false)
+          .order('created_at', ascending: false);
+
+      if (pendingChanges.isNotEmpty) {
+        // Get the most recent change
+        final latestChange = pendingChanges.first;
+        final changeId = latestChange['id'] as String;
+
+        // Approve the change which will apply its changes to the course
+        await approveCourseChange(changeId);
+      }
+
       return true;
     } catch (e) {
       debugPrint('Error approving course: $e');

@@ -231,31 +231,59 @@ class ContentCreatorService {
     if (thumbnailFile != null && creatorId != null) {
       newThumbnailUrl = await uploadCourseThumbnail(thumbnailFile, creatorId);
 
-      // Delete old thumbnail if new one was uploaded successfully
-      if (newThumbnailUrl != null &&
-          currentThumbnailUrl != null &&
-          currentThumbnailUrl.isNotEmpty) {
-        await deleteCourseThumbnailFromStorage(currentThumbnailUrl);
+      // If thumbnail upload failed, return false
+      if (newThumbnailUrl == null && thumbnailFile != null) {
+        debugPrint('Thumbnail upload failed. Cannot request course changes.');
+        return false;
       }
     }
 
     try {
-      // Either update the course directly or create a change request based on your app's workflow
-      // This example updates the course directly including the thumbnail
-      await _supabase
-          .from('courses')
-          .update({
-            'title': title,
-            'description': description,
-            if (categoryId != null) 'category_id': categoryId,
-            if (newThumbnailUrl != null) 'thumbnail_url': newThumbnailUrl,
-          })
-          .eq('id', courseId);
+      // Get current course data for comparison
+      final courseResult =
+          await _supabase
+              .from('courses')
+              .select('title, description, category_id')
+              .eq('id', courseId)
+              .single();
+
+      final currentTitle = courseResult['title'] as String;
+      final currentDescription = courseResult['description'] as String? ?? '';
+      final currentCategoryId = courseResult['category_id'] as String?;
+
+      // Check if there are actual changes to submit
+      final titleChanged = title != currentTitle;
+      final descriptionChanged = description != currentDescription;
+      final categoryChanged =
+          categoryId != null && categoryId != currentCategoryId;
+      final thumbnailChanged = newThumbnailUrl != null;
+
+      if (!titleChanged &&
+          !descriptionChanged &&
+          !categoryChanged &&
+          !thumbnailChanged) {
+        debugPrint('No changes detected. Not creating a change request.');
+        return false;
+      }
+
+      // Create a change request in the course_changes table
+      await _supabase.from('course_changes').insert({
+        'course_id': courseId,
+        'title': title,
+        'description': description,
+        if (categoryId != null) 'category_id': categoryId,
+        if (newThumbnailUrl != null) 'thumbnail_url': newThumbnailUrl,
+        'is_reviewed': false,
+      });
+
+      // Update membership_type and difficulty directly as they don't require approval
+      // These would need to be handled through parameters to this method
+      // This is currently handled directly in the UI code
 
       return true;
     } catch (e) {
-      debugPrint('Error updating course: $e');
-      // If we uploaded a new thumbnail but the update failed, clean up
+      debugPrint('Error requesting course changes: $e');
+      // If we uploaded a new thumbnail but the request creation failed, clean up
       if (newThumbnailUrl != null) {
         await deleteCourseThumbnailFromStorage(newThumbnailUrl);
       }
