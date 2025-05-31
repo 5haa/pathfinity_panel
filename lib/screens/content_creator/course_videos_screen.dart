@@ -235,7 +235,9 @@ class _CourseVideosScreenState extends ConsumerState<CourseVideosScreen> {
       if (newVideo != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Video added successfully'),
+            content: Text(
+              'Video added successfully and submitted for admin approval',
+            ),
             backgroundColor: AppTheme.successColor,
           ),
         );
