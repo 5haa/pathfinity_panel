@@ -27,6 +27,7 @@ class _AdminCourseManagementScreenState
   bool _isLoading = true;
   Map<String, dynamic>? _courseData;
   List<Map<String, dynamic>> _courseChanges = [];
+  List<Map<String, dynamic>> _videoChanges = [];
   bool _showCourseChangesTab = false;
 
   @override
@@ -34,6 +35,7 @@ class _AdminCourseManagementScreenState
     super.initState();
     _loadCourseData();
     _loadCourseChanges();
+    _loadVideoChanges();
   }
 
   // Load course data
@@ -51,9 +53,11 @@ class _AdminCourseManagementScreenState
       if (courseWithVideos != null) {
         setState(() {
           _courseData = courseWithVideos;
-          // We no longer need to process videos here
         });
       }
+
+      // Also reload related data
+      await _loadVideoChanges();
     } catch (e) {
       debugPrint('Error loading course data: $e');
     } finally {
@@ -82,6 +86,28 @@ class _AdminCourseManagementScreenState
       });
     } catch (e) {
       debugPrint('Error loading course changes: $e');
+    }
+  }
+
+  // Load pending video changes for this course
+  Future<void> _loadVideoChanges() async {
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final videoChanges = await adminService.getPendingVideoChanges();
+
+      // Filter only changes for this course
+      final filteredChanges =
+          videoChanges.where((change) {
+            final videoData = change['course_video'];
+            return videoData != null &&
+                videoData['course_id'] == widget.courseId;
+          }).toList();
+
+      setState(() {
+        _videoChanges = filteredChanges;
+      });
+    } catch (e) {
+      debugPrint('Error loading video changes: $e');
     }
   }
 
@@ -624,6 +650,9 @@ class _AdminCourseManagementScreenState
               .length;
     }
 
+    // Get video changes information
+    int pendingVideoChanges = _videoChanges.length;
+
     // Get status text and color based on approval status
     String statusText;
     Color statusColor;
@@ -769,6 +798,49 @@ class _AdminCourseManagementScreenState
                         ),
                         icon: const Icon(Icons.visibility, size: 16),
                         label: const Text('Review Videos'),
+                        onPressed: () {
+                          context.go(
+                            '/admin/courses/${widget.courseId}/videos',
+                            extra: {'courseTitle': widget.courseTitle},
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+                if (pendingVideoChanges > 0 && isApproved == true) ...[
+                  if (pendingVideos > 0) const SizedBox(height: 12),
+                  if (pendingVideos <= 0) ...[
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                  ],
+                  Row(
+                    children: [
+                      Icon(Icons.edit_note, color: Colors.purple, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This course has $pendingVideoChanges video change${pendingVideoChanges > 1 ? 's' : ''} awaiting review',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.purple,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        icon: const Icon(Icons.visibility, size: 16),
+                        label: const Text('Review Changes'),
                         onPressed: () {
                           context.go(
                             '/admin/courses/${widget.courseId}/videos',

@@ -21,6 +21,8 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
   List<Map<String, dynamic>> _courses = [];
   List<Map<String, dynamic>> _courseChanges = [];
   Map<String, int> _pendingVideosCount = {}; // Track pending videos by course
+  Map<String, int> _pendingVideoChangesCount =
+      {}; // Track pending video changes by course
   Map<String, dynamic>? _selectedCourse;
   bool _showCourseChangesTab = false;
 
@@ -30,6 +32,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
     _loadCourses();
     _loadCourseChanges();
     _loadPendingVideosCount();
+    _loadPendingVideoChangesCount();
   }
 
   Future<void> _loadCourses() async {
@@ -49,6 +52,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
 
       // Refresh pending videos count when courses are loaded
       await _loadPendingVideosCount();
+      await _loadPendingVideoChangesCount();
     } catch (e) {
       debugPrint('Error loading courses: $e');
     } finally {
@@ -83,6 +87,20 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
       });
     } catch (e) {
       debugPrint('Error loading pending videos count: $e');
+    }
+  }
+
+  Future<void> _loadPendingVideoChangesCount() async {
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final pendingVideoChangesCount =
+          await adminService.getPendingVideoChangesCountByCourse();
+
+      setState(() {
+        _pendingVideoChangesCount = pendingVideoChangesCount;
+      });
+    } catch (e) {
+      debugPrint('Error loading pending video changes count: $e');
     }
   }
 
@@ -907,6 +925,10 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
     final int pendingVideosCount = _pendingVideosCount[id] ?? 0;
     final bool hasPendingVideos = pendingVideosCount > 0;
 
+    // Check for pending video changes for this course
+    final int pendingVideoChangesCount = _pendingVideoChangesCount[id] ?? 0;
+    final bool hasPendingVideoChanges = pendingVideoChangesCount > 0;
+
     // Status text and color based on approval status
     String statusText;
     Color statusColor;
@@ -1120,6 +1142,39 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
                                 const SizedBox(width: 2),
                                 Text(
                                   '$pendingVideosCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      if (hasPendingVideoChanges)
+                        Tooltip(
+                          message:
+                              '$pendingVideoChangesCount pending video change(s)',
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.purple,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.edit_note,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$pendingVideoChangesCount',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,

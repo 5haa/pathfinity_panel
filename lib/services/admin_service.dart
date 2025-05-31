@@ -419,15 +419,8 @@ class AdminService {
       }
 
       final courseChange = Map<String, dynamic>.from(result.first);
-      final courseId = courseChange['course_id'];
 
-      // Update the course's status in courses table
-      await _supabase
-          .from('courses')
-          .update({'is_approved': false, 'rejection_reason': reason})
-          .eq('id', courseId);
-
-      // Mark the change as reviewed and rejected
+      // Mark the change as reviewed and rejected - no need to modify the course itself
       await _supabase
           .from('course_changes')
           .update({
@@ -512,19 +505,8 @@ class AdminService {
       }
 
       final videoChange = Map<String, dynamic>.from(result.first);
-      final courseVideoId = videoChange['course_video_id'];
 
-      // Update the video's status in course_videos table
-      await _supabase
-          .from('course_videos')
-          .update({
-            'is_reviewed': true,
-            'is_approved': false,
-            'rejection_reason': reason,
-          })
-          .eq('id', courseVideoId);
-
-      // Mark the change as reviewed and rejected
+      // Mark the change as reviewed and rejected - no need to modify the video itself
       await _supabase
           .from('video_changes')
           .update({
@@ -806,6 +788,38 @@ class AdminService {
       return pendingVideosCounts;
     } catch (e) {
       debugPrint('Error getting pending videos count: $e');
+      return {};
+    }
+  }
+
+  // Get pending video changes count for courses
+  Future<Map<String, int>> getPendingVideoChangesCountByCourse() async {
+    try {
+      final data = await _supabase
+          .from('video_changes')
+          .select('''
+            id,
+            course_video:course_video_id(
+              course_id
+            )
+          ''')
+          .eq('is_reviewed', false);
+
+      final Map<String, int> pendingVideoChangesCounts = {};
+
+      // Group video changes by course_id
+      for (var videoChange in data) {
+        if (videoChange['course_video'] != null) {
+          final String courseId =
+              videoChange['course_video']['course_id'] as String;
+          pendingVideoChangesCounts[courseId] =
+              (pendingVideoChangesCounts[courseId] ?? 0) + 1;
+        }
+      }
+
+      return pendingVideoChangesCounts;
+    } catch (e) {
+      debugPrint('Error getting pending video changes count: $e');
       return {};
     }
   }
