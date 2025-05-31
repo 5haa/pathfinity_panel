@@ -732,4 +732,35 @@ class AdminService {
       return false;
     }
   }
+
+  // Toggle course active status
+  Future<bool> toggleCourseActiveStatus(String courseId, bool isActive) async {
+    try {
+      await _supabase
+          .from('courses')
+          .update({'is_active': isActive})
+          .eq('id', courseId);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating course active status: $e');
+      return false;
+    }
+  }
+
+  // Toggle internship active status
+  Future<bool> toggleInternshipActiveStatus(
+    String internshipId,
+    bool isActive,
+  ) async {
+    try {
+      await _supabase
+          .from('internships')
+          .update({'is_active': isActive})
+          .eq('id', internshipId);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating internship active status: $e');
+      return false;
+    }
+  }
 }

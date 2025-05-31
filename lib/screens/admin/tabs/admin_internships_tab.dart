@@ -216,6 +216,69 @@ class _AdminInternshipsTabState extends ConsumerState<AdminInternshipsTab> {
     }
   }
 
+  Future<void> _toggleInternshipActiveStatus(
+    String internshipId,
+    bool newActiveStatus,
+  ) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final success = await adminService.toggleInternshipActiveStatus(
+        internshipId,
+        newActiveStatus,
+      );
+
+      if (success && mounted) {
+        // Update the local state immediately to reflect the change
+        setState(() {
+          for (int i = 0; i < _internships.length; i++) {
+            if (_internships[i]['id'] == internshipId) {
+              _internships[i]['is_active'] = newActiveStatus;
+              break;
+            }
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Internship ${newActiveStatus ? 'activated' : 'deactivated'} successfully',
+            ),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        // Reload from server to ensure data consistency
+        await _loadInternships();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to ${newActiveStatus ? 'activate' : 'deactivate'} internship',
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error updating internship active status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An error occurred while updating internship status'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _isLoading
@@ -464,6 +527,34 @@ class _AdminInternshipsTabState extends ConsumerState<AdminInternshipsTab> {
                         ],
                       ),
                     ),
+
+                  // Action button for approved internships
+                  if (isApproved == true)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          CustomButton(
+                            text: isActive ? 'Set Inactive' : 'Set Active',
+                            onPressed:
+                                () => _toggleInternshipActiveStatus(
+                                  internship['id'],
+                                  !isActive,
+                                ),
+                            type:
+                                isActive
+                                    ? ButtonType.warning
+                                    : ButtonType.success,
+                            icon:
+                                isActive
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                            height: 40,
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -697,8 +788,23 @@ class _AdminInternshipsTabState extends ConsumerState<AdminInternshipsTab> {
                     ),
                   ),
                   const SizedBox(height: 8),
+
+                  // Add status details here
                   _buildDetailRow(statusIcon, 'Status', statusText),
 
+                  // Add more status details here
+                  _buildDetailRow(
+                    Icons.calendar_today,
+                    'Created',
+                    '${createdAt.day}/${createdAt.month}/${createdAt.year}',
+                  ),
+                  _buildDetailRow(
+                    Icons.update,
+                    'Updated',
+                    '${updatedAt.day}/${updatedAt.month}/${updatedAt.year}',
+                  ),
+
+                  // For rejected internships, show rejection reason
                   if (isApproved == false)
                     _buildDetailRow(
                       Icons.comment,
@@ -706,16 +812,37 @@ class _AdminInternshipsTabState extends ConsumerState<AdminInternshipsTab> {
                       rejectionReason,
                     ),
 
-                  _buildDetailRow(
-                    Icons.calendar_today,
-                    'Created At',
-                    '${createdAt.day}/${createdAt.month}/${createdAt.year}',
-                  ),
-                  _buildDetailRow(
-                    Icons.update,
-                    'Last Updated',
-                    '${updatedAt.day}/${updatedAt.month}/${updatedAt.year}',
-                  ),
+                  // Add active status toggle for approved internships
+                  if (isApproved == true) ...[
+                    const SizedBox(height: 20),
+                    _buildDetailRow(
+                      Icons.visibility,
+                      'Visibility',
+                      isActive
+                          ? 'This internship is visible to students'
+                          : 'This internship is hidden from students',
+                    ),
+                    const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.center,
+                      child: CustomButton(
+                        text: isActive ? 'Set Inactive' : 'Set Active',
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _toggleInternshipActiveStatus(
+                            internship['id'],
+                            !isActive,
+                          );
+                        },
+                        type:
+                            isActive ? ButtonType.warning : ButtonType.success,
+                        icon:
+                            isActive ? Icons.visibility_off : Icons.visibility,
+                        height: 45,
+                        width: 200,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

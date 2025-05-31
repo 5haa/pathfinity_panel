@@ -400,6 +400,63 @@ class _AdminCourseManagementScreenState
     }
   }
 
+  Future<void> _toggleCourseActiveStatus(bool newActiveStatus) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final success = await adminService.toggleCourseActiveStatus(
+        widget.courseId,
+        newActiveStatus,
+      );
+
+      if (success && mounted) {
+        // Update the local state immediately to reflect the change
+        setState(() {
+          if (_courseData != null) {
+            _courseData!['is_active'] = newActiveStatus;
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Course ${newActiveStatus ? 'activated' : 'deactivated'} successfully',
+            ),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        // Reload from server to ensure data consistency
+        await _loadCourseData();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to ${newActiveStatus ? 'activate' : 'deactivate'} course',
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error updating course active status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An error occurred while updating course status'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -768,6 +825,30 @@ class _AdminCourseManagementScreenState
             ),
             const SizedBox(height: 8),
             _buildDetailRow(Icons.comment, 'Rejection Reason', rejectionReason),
+          ],
+
+          // Add toggle active status button for approved courses
+          if (isApproved == true) ...[
+            _buildDetailRow(
+              Icons.visibility,
+              'Status',
+              isActive
+                  ? 'This course is visible to students'
+                  : 'This course is hidden from students',
+            ),
+            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.center,
+              child: CustomButton(
+                text: isActive ? 'Set Inactive' : 'Set Active',
+                onPressed: () => _toggleCourseActiveStatus(!isActive),
+                type: isActive ? ButtonType.warning : ButtonType.success,
+                icon: isActive ? Icons.visibility_off : Icons.visibility,
+                height: 45,
+                width: 200,
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
 
           // Action buttons for pending or rejected courses
