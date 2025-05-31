@@ -206,53 +206,24 @@ class AuthService {
   Future<bool> verifyOTP(String email, String otp) async {
     try {
       debugPrint('AuthService: Verifying OTP for email: $email');
-
-      // First, try to verify the OTP
       final response = await _supabase.auth.verifyOTP(
         email: email,
         token: otp,
-        type: OtpType.email,
+        type: OtpType.signup,
       );
 
-      debugPrint(
-        'AuthService: OTP verification response - User: ${response.user?.id}, email confirmed: ${response.user?.emailConfirmedAt}',
-      );
-
-      // If we have a user but verification didn't mark the email as confirmed,
-      // we may need to refresh the session or try a different approach
       if (response.user != null) {
-        // First attempt: refresh the session
         debugPrint(
-          'AuthService: Attempting to refresh session after OTP verification',
+          'AuthService: OTP verification successful. User: ${response.user?.id}, Email Confirmed At: ${response.user?.emailConfirmedAt}',
         );
-        try {
-          final refreshResult = await _supabase.auth.refreshSession();
-          debugPrint(
-            'AuthService: Session refreshed. User: ${refreshResult.user?.id}, Email confirmed: ${refreshResult.user?.emailConfirmedAt}',
-          );
-
-          // If refreshing worked and email is now confirmed, return success
-          if (refreshResult.user?.emailConfirmedAt != null) {
-            return true;
-          }
-        } catch (refreshError) {
-          debugPrint('AuthService: Error refreshing session: $refreshError');
-        }
-
-        // If we still don't have confirmation, try a deeper check
-        final isVerified = await isEmailVerified();
-        debugPrint(
-          'AuthService: Deep email verification check result: $isVerified',
-        );
-        return isVerified;
+      } else {
+        debugPrint('AuthService: OTP verification returned null user.');
       }
 
-      // Fall back to checking if we have a user as a success indicator
-      return response.user != null;
+      return response.user != null && response.user?.emailConfirmedAt != null;
     } catch (e) {
       debugPrint('AuthService: Error verifying OTP: $e');
 
-      // Special handling for specific error messages that might still mean success
       if (e.toString().contains('User already confirmed')) {
         debugPrint(
           'AuthService: User is already confirmed, treating as success',

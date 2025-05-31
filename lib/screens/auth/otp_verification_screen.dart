@@ -327,8 +327,13 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed:
-              () => GoRouter.of(context).go('/login'), // Go back to login
+          onPressed: () {
+            if (GoRouter.of(context).canPop()) {
+              GoRouter.of(context).pop();
+            } else {
+              GoRouter.of(context).go('/login'); // Fallback if cannot pop
+            }
+          },
         ),
       ),
       body: SafeArea(

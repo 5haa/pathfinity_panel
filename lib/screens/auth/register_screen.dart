@@ -151,12 +151,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
       debugPrint('Sign up completed');
 
-      // Send verification email
-      await ref.read(authProvider.notifier).sendEmailVerification(email);
+      // Send verification email - Commenting this out as Supabase likely handles this
+      // if "Confirm email" is enabled in project settings.
+      // await ref.read(authProvider.notifier).sendEmailVerification(email);
 
-      debugPrint(
-        'Verification email sent, proceeding to OTP verification screen',
-      );
+      // debugPrint(
+      //   'Verification email sent, router will redirect to OTP screen if needed',
+      // );
+      // The above debugPrint is also commented as it refers to the manual send.
+      // A new debugPrint indicating reliance on automatic email can be added if desired.
+      debugPrint('Assuming Supabase sent confirmation email/OTP upon signup.');
 
       if (!mounted) return;
 
@@ -166,14 +170,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
           backgroundColor: AppTheme.successColor,
         ),
       );
-
-      // Navigate to OTP verification screen - ensure we use the navgiation directly to bypass any routing redirects
-      debugPrint('Navigating to OTP verification screen');
-      if (mounted) {
-        GoRouter.of(
-          context,
-        ).go('/verify-email?email=${Uri.encodeComponent(email)}');
-      }
     } catch (e) {
       debugPrint('Error during registration: $e');
       if (!mounted) return;
