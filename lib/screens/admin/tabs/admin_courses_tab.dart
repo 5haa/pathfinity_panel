@@ -5,6 +5,7 @@ import 'package:admin_panel/services/admin_service.dart';
 import 'package:admin_panel/widgets/custom_button.dart';
 import 'package:admin_panel/screens/admin/admin_course_videos_screen.dart';
 import 'package:admin_panel/screens/admin/admin_course_management_screen.dart';
+import 'package:go_router/go_router.dart';
 
 final adminServiceProvider = Provider<AdminService>((ref) => AdminService());
 
@@ -37,6 +38,8 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
     try {
       final adminService = ref.read(adminServiceProvider);
       final courses = await adminService.getAllCourses();
+
+      debugPrint('Loaded ${courses.length} courses from API');
 
       setState(() {
         _courses = courses;
@@ -1035,7 +1038,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
                       fontWeight: FontWeight.bold,
                       color: AppTheme.primaryColor,
                     ),
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
@@ -1196,27 +1199,45 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
     final String courseId = course['id'];
     final String courseTitle = course['title'] ?? 'Untitled Course';
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (context) => AdminCourseManagementScreen(
-              courseId: courseId,
-              courseTitle: courseTitle,
-            ),
-      ),
-    );
+    try {
+      context.go(
+        '/admin/courses/$courseId/management',
+        extra: {'courseTitle': courseTitle},
+      );
+    } catch (e) {
+      // Fallback to MaterialPageRoute if GoRouter fails
+      debugPrint('Navigation error: $e');
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (context) => AdminCourseManagementScreen(
+                courseId: courseId,
+                courseTitle: courseTitle,
+              ),
+        ),
+      );
+    }
   }
 
   void _navigateToCourseVideosScreen(String courseId, String courseTitle) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (context) => AdminCourseVideosScreen(
-              courseId: courseId,
-              courseTitle: courseTitle,
-            ),
-      ),
-    );
+    try {
+      context.go(
+        '/admin/courses/$courseId/videos',
+        extra: {'courseTitle': courseTitle},
+      );
+    } catch (e) {
+      // Fallback to MaterialPageRoute if GoRouter fails
+      debugPrint('Navigation error: $e');
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (context) => AdminCourseVideosScreen(
+                courseId: courseId,
+                courseTitle: courseTitle,
+              ),
+        ),
+      );
+    }
   }
 
   Widget _buildDetailRow(IconData icon, String label, String value) {
