@@ -20,6 +20,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _courses = [];
   List<Map<String, dynamic>> _courseChanges = [];
+  Map<String, int> _pendingVideosCount = {}; // Track pending videos by course
   Map<String, dynamic>? _selectedCourse;
   bool _showCourseChangesTab = false;
 
@@ -28,6 +29,7 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
     super.initState();
     _loadCourses();
     _loadCourseChanges();
+    _loadPendingVideosCount();
   }
 
   Future<void> _loadCourses() async {
@@ -44,6 +46,9 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
       setState(() {
         _courses = courses;
       });
+
+      // Refresh pending videos count when courses are loaded
+      await _loadPendingVideosCount();
     } catch (e) {
       debugPrint('Error loading courses: $e');
     } finally {
@@ -64,6 +69,20 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
       });
     } catch (e) {
       debugPrint('Error loading course changes: $e');
+    }
+  }
+
+  Future<void> _loadPendingVideosCount() async {
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final pendingVideosCount =
+          await adminService.getPendingVideosCountByCourse();
+
+      setState(() {
+        _pendingVideosCount = pendingVideosCount;
+      });
+    } catch (e) {
+      debugPrint('Error loading pending videos count: $e');
     }
   }
 
@@ -867,16 +886,28 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
   }
 
   Widget _buildCourseCard(Map<String, dynamic> course) {
-    final bool isActive = course['is_active'] ?? false;
-    final bool? isApproved = course['is_approved'];
-    final String? thumbnailUrl = course['thumbnail_url'];
+    final String id = course['id'] ?? '';
     final String title = course['title'] ?? 'Untitled Course';
-
-    // Extract membership type and difficulty level for the badge
+    final String? thumbnailUrl = course['thumbnail_url'];
+    final String categoryName =
+        course['course_categories'] != null
+            ? course['course_categories']['name'] ?? 'Uncategorized'
+            : 'Uncategorized';
+    final bool? isApproved = course['is_approved'];
     final String membershipType = course['membership_type'] ?? 'PRO';
     final String difficulty = course['difficulty'] ?? 'medium';
 
-    // Get badge text and color based on approval status
+    // Check for pending changes for this course
+    final bool hasPendingChanges = _courseChanges.any((change) {
+      final courseData = change['course'];
+      return courseData != null && courseData['id'] == id;
+    });
+
+    // Check for pending videos for this course
+    final int pendingVideosCount = _pendingVideosCount[id] ?? 0;
+    final bool hasPendingVideos = pendingVideosCount > 0;
+
+    // Status text and color based on approval status
     String statusText;
     Color statusColor;
     IconData statusIcon;
@@ -1031,15 +1062,75 @@ class _AdminCoursesTabState extends ConsumerState<AdminCoursesTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+
+                      // Notification badges for pending items
+                      if (hasPendingChanges)
+                        Tooltip(
+                          message: 'Has pending course changes',
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Text(
+                              '!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      if (hasPendingVideos)
+                        Tooltip(
+                          message: '$pendingVideosCount pending video(s)',
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.video_library,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$pendingVideosCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Row(

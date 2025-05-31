@@ -49,13 +49,32 @@ class _AdminCourseVideosScreenState
       );
 
       if (courseWithVideos != null) {
+        // Extract course videos and sort them - pending review videos first
+        List<Map<String, dynamic>> videos = [];
+        if (courseWithVideos['course_videos'] != null) {
+          videos = List<Map<String, dynamic>>.from(
+            courseWithVideos['course_videos'],
+          );
+
+          // Sort videos - pending review first, then by sequence number
+          videos.sort((a, b) {
+            // First sort by review status
+            final bool aIsReviewed = a['is_reviewed'] ?? false;
+            final bool bIsReviewed = b['is_reviewed'] ?? false;
+
+            if (!aIsReviewed && bIsReviewed) return -1; // a comes first
+            if (aIsReviewed && !bIsReviewed) return 1; // b comes first
+
+            // Then sort by sequence number
+            final int aSeq = a['sequence_number'] ?? 0;
+            final int bSeq = b['sequence_number'] ?? 0;
+            return aSeq.compareTo(bSeq);
+          });
+        }
+
         setState(() {
           _courseData = courseWithVideos;
-          if (courseWithVideos['course_videos'] != null) {
-            _courseVideos = List<Map<String, dynamic>>.from(
-              courseWithVideos['course_videos'],
-            );
-          }
+          _courseVideos = videos;
         });
       }
     } catch (e) {
@@ -205,6 +224,10 @@ class _AdminCourseVideosScreenState
 
   // Videos tab content
   Widget _buildVideosTab() {
+    // Count pending review videos
+    int pendingReviewCount =
+        _courseVideos.where((video) => !(video['is_reviewed'] ?? false)).length;
+
     return RefreshIndicator(
       onRefresh: _loadCourseVideos,
       child: SingleChildScrollView(
@@ -213,6 +236,33 @@ class _AdminCourseVideosScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (pendingReviewCount > 0)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      color: Colors.blue,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This course has $pendingReviewCount video${pendingReviewCount > 1 ? "s" : ""} pending review.',
+                        style: const TextStyle(color: Colors.blue),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             if (_courseVideos.isEmpty)
               _buildEmptyState()
             else
@@ -270,6 +320,30 @@ class _AdminCourseVideosScreenState
     final int sequenceNumber = video['sequence_number'] ?? 0;
     final DateTime createdAt = DateTime.parse(video['created_at']);
     final String? thumbnailUrl = video['thumbnail_url'];
+    final bool isApproved = video['is_approved'] ?? false;
+    final bool isReviewed = video['is_reviewed'] ?? false;
+    final String? rejectionReason = video['rejection_reason'];
+
+    // Get status information
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (isReviewed) {
+      if (isApproved) {
+        statusText = 'Approved';
+        statusColor = AppTheme.successColor;
+        statusIcon = Icons.check_circle;
+      } else {
+        statusText = 'Rejected';
+        statusColor = AppTheme.errorColor;
+        statusIcon = Icons.cancel;
+      }
+    } else {
+      statusText = 'Pending Review';
+      statusColor = AppTheme.warningColor;
+      statusIcon = Icons.pending;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -331,6 +405,7 @@ class _AdminCourseVideosScreenState
                       horizontal: 8,
                       vertical: 4,
                     ),
+                    margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
                       color: Colors.green.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -345,6 +420,32 @@ class _AdminCourseVideosScreenState
                       ),
                     ),
                   ),
+                // Status badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        statusText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -399,6 +500,64 @@ class _AdminCourseVideosScreenState
               ],
             ),
           ),
+
+          // Show rejection reason if applicable
+          if (rejectionReason != null && isReviewed && !isApproved)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: AppTheme.errorColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rejection reason: $rejectionReason',
+                      style: const TextStyle(
+                        color: AppTheme.errorColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Approval actions if pending review
+          if (!isReviewed)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  CustomButton(
+                    text: 'Reject',
+                    onPressed: () => _showRejectVideoDialog(video['id']),
+                    icon: Icons.close,
+                    type: ButtonType.warning,
+                    height: 36,
+                  ),
+                  const SizedBox(width: 12),
+                  CustomButton(
+                    text: 'Approve',
+                    onPressed: () => _approveVideo(video['id']),
+                    icon: Icons.check,
+                    type: ButtonType.success,
+                    height: 36,
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -980,6 +1139,143 @@ class _AdminCourseVideosScreenState
             ),
           ),
     );
+  }
+
+  Future<void> _approveVideo(String videoId) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final success = await adminService.approveCourseVideo(videoId);
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video approved successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        await _loadCourseVideos(); // Reload to update the UI
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to approve video'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error approving video: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An error occurred while approving video'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showRejectVideoDialog(String videoId) {
+    final TextEditingController reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Reject Video'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Please provide a reason for rejection:'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Enter rejection reason',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  final reason = reasonController.text;
+                  Navigator.of(context).pop();
+                  if (reason.trim().isNotEmpty) {
+                    _rejectVideo(videoId, reason);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please provide a rejection reason'),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
+                  }
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.errorColor,
+                ),
+                child: const Text('Reject'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _rejectVideo(String videoId, String reason) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final adminService = ref.read(adminServiceProvider);
+      final success = await adminService.rejectCourseVideo(videoId, reason);
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video rejected successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        await _loadCourseVideos(); // Reload to update the UI
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to reject video'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error rejecting video: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An error occurred while rejecting video'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 }
 

@@ -588,7 +588,7 @@ class _AdminCourseManagementScreenState
   // Course details tab
   Widget _buildCourseDetailsTab() {
     if (_courseData == null) {
-      return const Center(child: Text('Course data not available'));
+      return _buildEmptyState('No course data available');
     }
 
     final bool isActive = _courseData!['is_active'] ?? false;
@@ -612,6 +612,17 @@ class _AdminCourseManagementScreenState
     final DateTime createdAt = DateTime.parse(_courseData!['created_at']);
     final DateTime updatedAt = DateTime.parse(_courseData!['updated_at']);
     final String? thumbnailUrl = _courseData!['thumbnail_url'];
+
+    // Get videos information
+    List<dynamic>? courseVideos = _courseData!['course_videos'];
+    int totalVideos = courseVideos?.length ?? 0;
+    int pendingVideos = 0;
+    if (courseVideos != null) {
+      pendingVideos =
+          courseVideos
+              .where((video) => !(video['is_reviewed'] ?? false))
+              .length;
+    }
 
     // Get status text and color based on approval status
     String statusText;
@@ -662,11 +673,21 @@ class _AdminCourseManagementScreenState
                           thumbnailUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(
-                                Icons.image_not_supported,
-                                size: 64,
-                                color: Colors.grey,
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.image_not_supported,
+                                    size: 40,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Failed to load thumbnail',
+                                    style: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                ],
                               ),
                             );
                           },
@@ -678,20 +699,87 @@ class _AdminCourseManagementScreenState
                           children: [
                             const Icon(
                               Icons.image,
-                              size: 64,
+                              size: 40,
                               color: Colors.grey,
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'No thumbnail available',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
+                              style: TextStyle(color: Colors.grey[700]),
                             ),
                           ],
                         ),
                       ),
+            ),
+          ),
+
+          // Course status section
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.05),
+              border: Border.all(color: statusColor.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(statusIcon, color: statusColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Course Status: $statusText',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+                if (pendingVideos > 0 && isApproved == true) ...[
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(Icons.video_library, color: Colors.blue, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This course has $pendingVideos video${pendingVideos > 1 ? 's' : ''} awaiting review',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        icon: const Icon(Icons.visibility, size: 16),
+                        label: const Text('Review Videos'),
+                        onPressed: () {
+                          context.go(
+                            '/admin/courses/${widget.courseId}/videos',
+                            extra: {'courseTitle': widget.courseTitle},
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
 
@@ -700,7 +788,6 @@ class _AdminCourseManagementScreenState
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildStatusBadge(statusText, statusColor, statusIcon),
               _buildStatusBadge(
                 isActive ? 'Active' : 'Inactive',
                 isActive ? AppTheme.accentColor : Colors.grey,

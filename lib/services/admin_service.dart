@@ -550,7 +550,8 @@ class AdminService {
           .update({'is_approved': true})
           .eq('id', courseId);
 
-      // Then approve all videos in this course
+      // Then approve only videos that currently exist in this course
+      // This won't affect videos added after the course is approved
       await _supabase
           .from('course_videos')
           .update({
@@ -558,7 +559,11 @@ class AdminService {
             'is_reviewed': true,
             'rejection_reason': null,
           })
-          .eq('course_id', courseId);
+          .eq('course_id', courseId)
+          .eq(
+            'is_reviewed',
+            false,
+          ); // Only approve videos that haven't been reviewed yet
 
       // Check for any pending course changes and apply them
       final List<dynamic> pendingChanges = await _supabase
@@ -778,6 +783,30 @@ class AdminService {
     } catch (e) {
       debugPrint('Error updating internship active status: $e');
       return false;
+    }
+  }
+
+  // Get pending videos count for courses
+  Future<Map<String, int>> getPendingVideosCountByCourse() async {
+    try {
+      final data = await _supabase
+          .from('course_videos')
+          .select('course_id, id')
+          .eq('is_reviewed', false);
+
+      final Map<String, int> pendingVideosCounts = {};
+
+      // Group videos by course_id
+      for (var video in data) {
+        final String courseId = video['course_id'] as String;
+        pendingVideosCounts[courseId] =
+            (pendingVideosCounts[courseId] ?? 0) + 1;
+      }
+
+      return pendingVideosCounts;
+    } catch (e) {
+      debugPrint('Error getting pending videos count: $e');
+      return {};
     }
   }
 }
