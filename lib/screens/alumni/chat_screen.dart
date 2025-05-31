@@ -53,6 +53,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     WidgetsBinding.instance.addObserver(this);
     _loadMessages();
     _loadCurrentUserProfile();
+    _loadStudentProfile();
     _subscribeToMessages();
 
     _scrollController.addListener(() {
@@ -280,6 +281,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     } catch (e) {
       debugPrint('Error loading current user profile: $e');
+    }
+  }
+
+  Future<void> _loadStudentProfile() async {
+    try {
+      final studentProfile = await _chatService
+          .getStudentProfileFromConversation(widget.conversationId);
+
+      if (mounted &&
+          studentProfile != null &&
+          studentProfile.profilePictureUrl != null) {
+        setState(() {
+          _studentProfilePictureUrl = studentProfile.profilePictureUrl;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading student profile: $e');
     }
   }
 

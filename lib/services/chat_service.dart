@@ -5,6 +5,7 @@ import 'package:admin_panel/models/chat_message_model.dart';
 import 'package:admin_panel/models/chat_participant_model.dart';
 import 'package:admin_panel/models/alumni_model.dart';
 import 'package:admin_panel/models/student_profile_model.dart';
+import 'package:admin_panel/services/auth_service.dart';
 import 'dart:async';
 
 class ChatService {
@@ -13,21 +14,45 @@ class ChatService {
   // Get all conversations for the specified alumni user or current user
   Future<List<Map<String, dynamic>>> getConversations([String? userId]) async {
     try {
-      // Get the current user ID
+      // Get the current user ID - IMPORTANT: Always use the passed userId parameter if provided
       final currentUserId = userId ?? _supabase.auth.currentUser!.id;
+
+      // Log the current auth user for debugging
+      final authUser = _supabase.auth.currentUser;
+      debugPrint('AUTH USER: ${authUser?.id}, Email: ${authUser?.email}');
+      debugPrint('REQUESTED USER ID FOR CONVERSATIONS: $currentUserId');
+
       if (currentUserId.isEmpty) {
         debugPrint('Error: Empty user ID when getting conversations');
         return [];
       }
 
-      // Get conversations where the current user is a participant
+      // CRITICAL: Verify that the requested ID matches the current auth user
+      // This prevents accessing conversations from other users
+      if (authUser?.id != currentUserId) {
+        debugPrint(
+          'WARNING: Requested user ID does not match current auth user. Refusing to fetch conversations.',
+        );
+        return [];
+      }
+
+      // Get conversations where the current user is a participant with user_type='alumni'
+      // This ensures we only get alumni conversations for the current user
       final data = await _supabase
           .from('chat_participants')
           .select('conversation_id')
-          .eq('user_id', currentUserId);
+          .eq('user_id', currentUserId)
+          .eq(
+            'user_type',
+            'alumni',
+          ); // Make sure we only get alumni conversations
 
       final conversationIds =
           data.map((item) => item['conversation_id']).toList();
+
+      debugPrint(
+        'Found ${conversationIds.length} conversations for alumni: $currentUserId',
+      );
 
       if (conversationIds.isEmpty) {
         return [];
@@ -65,6 +90,10 @@ class ChatService {
                   .select()
                   .eq('conversation_id', convId)
                   .neq('user_id', currentUserId)
+                  .eq(
+                    'user_type',
+                    'student',
+                  ) // Make sure we're getting student participants
                   .maybeSingle();
 
           if (participantData == null) {
@@ -115,8 +144,14 @@ class ChatService {
 
           final unreadCount = unreadMessages.length;
 
+          // This conversation made it through all checks, add it
+          debugPrint(
+            'Adding conversation $convId with student $studentId for alumni $currentUserId',
+          );
+
           result.add({
             'id': convId,
+            'alumni_id': currentUserId, // Add the alumni ID for verification
             'created_at': convData['created_at'],
             'updated_at': convData['updated_at'],
             'student_id': studentId,
@@ -135,6 +170,11 @@ class ChatService {
           continue;
         }
       }
+
+      // Let's log the result to verify we're actually getting conversations
+      debugPrint(
+        'Returning ${result.length} conversations for user $currentUserId',
+      );
 
       // Sort by last message time, with safer parsing logic
       result.sort((a, b) {
@@ -619,6 +659,103 @@ class ChatService {
     } catch (e) {
       debugPrint('Error checking if user exists: $e');
       return false;
+    }
+  }
+
+  // Get student profile from conversation
+  Future<StudentProfile?> getStudentProfileFromConversation(
+    String conversationId,
+  ) async {
+    try {
+      // Get the current user ID
+      final currentUserId = _supabase.auth.currentUser!.id;
+
+      // Find the other participant (student) in the conversation
+      final participantData =
+          await _supabase
+              .from('chat_participants')
+              .select()
+              .eq('conversation_id', conversationId)
+              .neq('user_id', currentUserId)
+              .maybeSingle();
+
+      if (participantData == null) {
+        debugPrint(
+          'No student participant found for conversation $conversationId',
+        );
+        return null;
+      }
+
+      final studentId = participantData['user_id'];
+      if (studentId == null || studentId.toString().isEmpty) {
+        debugPrint('Invalid student ID for conversation $conversationId');
+        return null;
+      }
+
+      // Get student profile
+      final studentData =
+          await _supabase
+              .from('user_students')
+              .select()
+              .eq('id', studentId)
+              .maybeSingle();
+
+      if (studentData == null) {
+        debugPrint('Student profile not found for ID $studentId');
+        return null;
+      }
+
+      return StudentProfile.fromJson(studentData);
+    } catch (e) {
+      debugPrint('Error getting student profile from conversation: $e');
+      return null;
+    }
+  }
+
+  // Helper method to get user type info
+  Future<UserTypeInfo> _getUserTypeInfo(String userId) async {
+    try {
+      final response =
+          await _supabase
+              .rpc(
+                'get_user_type_and_status_by_id',
+                params: {'user_id': userId},
+              )
+              .select()
+              .single();
+
+      final userTypeStr = response['user_type'] as String?;
+      final isApproved = response['is_approved'] as bool? ?? false;
+      final isSuperAdmin = response['is_super_admin'] as bool? ?? false;
+
+      return UserTypeInfo(
+        userType: _parseUserType(userTypeStr),
+        isApproved: isApproved,
+        isSuperAdmin: isSuperAdmin,
+      );
+    } catch (e) {
+      debugPrint('Error getting user type info: $e');
+      return UserTypeInfo(
+        userType: UserType.unknown,
+        isApproved: false,
+        isSuperAdmin: false,
+      );
+    }
+  }
+
+  // Helper method to parse user type from string
+  UserType _parseUserType(String? userTypeStr) {
+    switch (userTypeStr) {
+      case 'admin':
+        return UserType.admin;
+      case 'alumni':
+        return UserType.alumni;
+      case 'company':
+        return UserType.company;
+      case 'content_creator':
+        return UserType.contentCreator;
+      default:
+        return UserType.unknown;
     }
   }
 }

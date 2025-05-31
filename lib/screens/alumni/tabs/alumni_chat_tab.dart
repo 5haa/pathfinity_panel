@@ -9,6 +9,7 @@ import 'package:admin_panel/providers/auth_provider.dart';
 import 'package:admin_panel/services/chat_service.dart';
 import 'package:admin_panel/widgets/profile_picture_widget.dart';
 import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final alumniServiceProvider = Provider<AlumniService>((ref) => AlumniService());
 final chatServiceProvider = Provider<ChatService>((ref) => ChatService());
@@ -21,6 +22,7 @@ final conversationsProvider =
 
 class ConversationsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   Timer? _refreshTimer;
+  String? _currentUserId;
 
   @override
   Future<List<Map<String, dynamic>>> build() async {
@@ -36,10 +38,24 @@ class ConversationsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
     _refreshTimer = null;
   }
 
+  // Clear all conversation data - call this on logout or user change
+  void clearConversations() {
+    debugPrint('ConversationsNotifier: Clearing all conversation data');
+    _stopRefreshTimer();
+    _currentUserId = null;
+    state = const AsyncValue.data([]);
+  }
+
   Future<void> loadConversations(String userId) async {
+    // Store the userId to ensure we're refreshing with the correct ID
+    _currentUserId = userId;
+
+    debugPrint('ConversationsNotifier: Loading conversations for user $userId');
+
     // Stop any existing refresh timer
     _stopRefreshTimer();
 
+    // Set loading state
     state = const AsyncValue.loading();
 
     try {
@@ -47,32 +63,51 @@ class ConversationsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
       final chatService = ref.read(chatServiceProvider);
       final conversations = await chatService.getConversations(userId);
 
-      // Set initial state
+      debugPrint(
+        'ConversationsNotifier: Initial load found ${conversations.length} conversations',
+      );
+
+      // Always set the data regardless of whether conversations is empty or not
       state = AsyncValue.data(conversations);
 
       // Start a polling refresh timer to simulate real-time updates
-      // Use a 5-second interval for polling updates
-      _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-        _refreshConversations(userId);
+      // Use a longer interval (8 seconds) to reduce overhead
+      _refreshTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
+        // Always use the stored userId to prevent mixing different users' conversations
+        if (_currentUserId != null) {
+          _refreshConversations(_currentUserId!);
+        }
       });
     } catch (e) {
+      debugPrint('ConversationsNotifier: Error loading conversations: $e');
       state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
   Future<void> _refreshConversations(String userId) async {
     // Don't refresh if we're in an error or loading state
-    if (state is AsyncLoading) return;
+    if (state is AsyncLoading) {
+      debugPrint('ConversationsNotifier: Skipping refresh as already loading');
+      return;
+    }
+
+    debugPrint(
+      'ConversationsNotifier: Refreshing conversations for user $userId',
+    );
 
     try {
       final chatService = ref.read(chatServiceProvider);
       final conversations = await chatService.getConversations(userId);
 
-      // Only update if we have data and it's different from current
+      debugPrint(
+        'ConversationsNotifier: Refresh found ${conversations.length} conversations',
+      );
+
+      // Always update with new data on refresh
       state = AsyncValue.data(conversations);
     } catch (e) {
       // Don't update state on error during background refresh
-      debugPrint('Error refreshing conversations: $e');
+      debugPrint('ConversationsNotifier: Error refreshing conversations: $e');
     }
   }
 }
@@ -101,6 +136,17 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+
+    // Add auth state listener to clear conversations on signout
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut) {
+        debugPrint(
+          'Auth state changed: User signed out. Clearing conversations.',
+        );
+        ref.read(conversationsProvider.notifier).clearConversations();
+      }
+    });
+
     // Delay loading to improve performance
     Future.microtask(() => _loadAlumniProfile());
   }
@@ -112,34 +158,89 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
   }
 
   Future<void> _loadAlumniProfile() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      debugPrint('Alumni profile already initialized, skipping load');
+      return;
+    }
 
+    debugPrint('Starting alumni profile loading');
     setState(() {
       _isLoading = true;
       _isLoadingConversations = true;
     });
 
+    // Clear any existing conversations to prevent showing data from previous users
+    final conversationsNotifier = ref.read(conversationsProvider.notifier);
+    conversationsNotifier.clearConversations();
+    debugPrint('Cleared previous conversations data');
+
     try {
-      // Use the auth service from the provider
-      final userProfile = await ref.read(authServiceProvider).getUserProfile();
+      // Get the current user ID directly from Supabase
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      final currentUserId = currentUser?.id;
+
+      if (currentUserId == null) {
+        debugPrint('Error: No current user found');
+        setState(() {
+          _isLoading = false;
+          _isInitialized = true;
+        });
+        return;
+      }
+
+      debugPrint('Loading alumni profile for user ID: $currentUserId');
+      debugPrint('Current user email: ${currentUser!.email}');
+
+      // Use the auth service from the provider to get user profile
+      final authService = ref.read(authServiceProvider);
+      final userProfile = await authService.getUserProfile();
 
       if (userProfile is AlumniUser) {
+        debugPrint(
+          'Successfully loaded alumni profile for: ${userProfile.id}, name: ${userProfile.firstName} ${userProfile.lastName}',
+        );
+
+        // Ensure we're not loading conversations with a stale or incorrect ID
+        if (userProfile.id != currentUserId) {
+          debugPrint(
+            'WARNING: Alumni ID mismatch. Profile ID: ${userProfile.id}, Auth ID: $currentUserId',
+          );
+        }
+
         setState(() {
           _alumniUser = userProfile;
           _isLoading = false;
           _isInitialized = true;
         });
 
+        // Wait a short delay before loading conversations to ensure state has updated
+        await Future.delayed(const Duration(milliseconds: 100));
+
         // Load conversations using the AsyncNotifier
         if (_alumniUser != null) {
+          debugPrint('Loading conversations for alumni: ${_alumniUser!.id}');
           // Show loading state while conversations load
           await ref
               .read(conversationsProvider.notifier)
               .loadConversations(_alumniUser!.id);
+        } else {
+          debugPrint('Alumni user became null after loading profile');
         }
+      } else {
+        debugPrint(
+          'Error: User profile is not an AlumniUser: ${userProfile?.runtimeType}',
+        );
+        setState(() {
+          _isLoading = false;
+          _isInitialized = true;
+        });
       }
     } catch (e) {
       debugPrint('Error loading alumni profile: $e');
+      if (e.toString().contains('No element')) {
+        debugPrint('This might be due to missing alumni record in database');
+      }
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -156,17 +257,49 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
   }
 
   Future<void> _loadConversations() async {
-    if (_alumniUser == null) return;
+    if (_alumniUser == null) {
+      debugPrint('Cannot load conversations: Alumni user is null');
+      return;
+    }
+
+    debugPrint('Loading conversations for alumni: ${_alumniUser!.id}');
 
     setState(() {
       _isLoadingConversations = true;
     });
 
     try {
-      // Use the AsyncNotifier to reload conversations
+      // Directly use ChatService to get conversations to verify data
+      final chatService = ChatService();
+      final rawConversations = await chatService.getConversations(
+        _alumniUser!.id,
+      );
+
+      debugPrint(
+        'Raw conversations direct from service: ${rawConversations.length}',
+      );
+
+      if (rawConversations.isEmpty) {
+        debugPrint(
+          'No conversations found for user ${_alumniUser!.id} from direct service call',
+        );
+      } else {
+        for (var conv in rawConversations.take(3)) {
+          debugPrint(
+            'Conv: ${conv['id']} - ${conv['student_first_name']} ${conv['student_last_name']}',
+          );
+        }
+      }
+
+      // Now use the AsyncNotifier to reload conversations
       await ref
           .read(conversationsProvider.notifier)
           .loadConversations(_alumniUser!.id);
+
+      // Force a rebuild to ensure we display the latest data
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error in _loadConversations: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -227,11 +360,37 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
   }
 
   List<Map<String, dynamic>> _getFilteredConversations() {
+    // Get current auth user ID for verification
+    final currentAuthUserId = Supabase.instance.client.auth.currentUser?.id;
+
     // Access conversations through the AsyncValue
     final conversationsAsync = ref.watch(conversationsProvider);
 
     return conversationsAsync.when(
       data: (conversations) {
+        // Verify conversations belong to current user
+        if (currentAuthUserId != null && _alumniUser != null) {
+          // Filter out any conversations that might not belong to the current user
+          conversations =
+              conversations.where((conv) {
+                final alumniId = conv['alumni_id'];
+                final belongsToCurrentUser =
+                    alumniId == currentAuthUserId &&
+                    alumniId == _alumniUser!.id;
+
+                if (!belongsToCurrentUser) {
+                  debugPrint(
+                    'WARNING: Filtering out conversation that does not belong to current user: ${conv['id']}',
+                  );
+                  debugPrint(
+                    'Conversation alumni_id: $alumniId, Current auth ID: $currentAuthUserId, Alumni user ID: ${_alumniUser!.id}',
+                  );
+                }
+
+                return belongsToCurrentUser;
+              }).toList();
+        }
+
         if (conversations.isEmpty || _searchQuery.isEmpty) return conversations;
 
         return conversations.where((conversation) {
@@ -490,43 +649,62 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
     final filteredConversations = _getFilteredConversations();
     final conversationsAsync = ref.watch(conversationsProvider);
 
+    // Debug log to check conversations state
+    final stateString = conversationsAsync.toString();
+    debugPrint(
+      'Building conversations tab. Current state: ${stateString.length > 50 ? stateString.substring(0, 50) + '...' : stateString}',
+    );
+    if (conversationsAsync.value != null) {
+      debugPrint('Conversations count: ${conversationsAsync.value!.length}');
+    }
+
     // If we're in initial loading state, show a centered loading indicator
     if (_isLoadingConversations && conversationsAsync.value?.isEmpty == true) {
+      debugPrint('Showing loading indicator for initial load');
       return const Center(child: CircularProgressIndicator());
     }
 
     // Show appropriate UI based on the async state
     return conversationsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error:
-          (error, stackTrace) => Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading conversations',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+      loading: () {
+        debugPrint('Conversations state: LOADING');
+        return const Center(child: CircularProgressIndicator());
+      },
+      error: (error, stackTrace) {
+        debugPrint('Conversations state: ERROR - $error');
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                'Error loading conversations',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: _loadConversations,
-                  child: const Text('Try Again'),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _loadConversations,
+                child: const Text('Try Again'),
+              ),
+            ],
           ),
+        );
+      },
       data: (conversations) {
+        debugPrint('Conversations state: DATA - ${conversations.length} items');
+
         // If we have no conversations but are still loading, show loading indicator
         if (conversations.isEmpty && _isLoadingConversations) {
+          debugPrint('No conversations but still loading');
           return const Center(child: CircularProgressIndicator());
         }
 
         if (filteredConversations.isEmpty) {
+          debugPrint('No filtered conversations to display');
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -592,6 +770,8 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
           );
         }
 
+        // We have conversations to display
+        debugPrint('Displaying ${filteredConversations.length} conversations');
         return RefreshIndicator(
           onRefresh: _loadConversations,
           child: Stack(
@@ -606,6 +786,10 @@ class _AlumniChatTabState extends ConsumerState<AlumniChatTab>
                       // Skip invalid conversations
                       return const SizedBox.shrink();
                     }
+
+                    debugPrint(
+                      'Building conversation ${conversation['id']} for student ${conversation['student_first_name']} ${conversation['student_last_name']}',
+                    );
 
                     final hasUnread = (conversation['unread_count'] ?? 0) > 0;
 

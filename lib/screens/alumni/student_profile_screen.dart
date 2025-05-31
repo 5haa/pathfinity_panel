@@ -5,6 +5,8 @@ import 'package:admin_panel/config/theme.dart';
 import 'package:admin_panel/models/student_profile_model.dart';
 import 'package:admin_panel/services/student_service.dart';
 import 'package:admin_panel/services/chat_service.dart';
+import 'package:admin_panel/widgets/profile_picture_widget.dart';
+import 'package:admin_panel/services/auth_service.dart';
 
 class StudentProfileScreen extends ConsumerStatefulWidget {
   final String studentId;
@@ -150,20 +152,32 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: AppTheme.primaryColor,
-                        child: Text(
-                          _student!.firstName.isNotEmpty &&
-                                  _student!.lastName.isNotEmpty
-                              ? _student!.firstName[0] + _student!.lastName[0]
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                      child:
+                          _student!.profilePictureUrl != null &&
+                                  _student!.profilePictureUrl!.isNotEmpty
+                              ? ProfilePictureWidget(
+                                userId: _student!.id,
+                                name: _student!.fullName,
+                                profilePictureUrl: _student!.profilePictureUrl,
+                                userType: UserType.unknown,
+                                size: 100,
+                                isEditable: false,
+                              )
+                              : CircleAvatar(
+                                radius: 50,
+                                backgroundColor: AppTheme.primaryColor,
+                                child: Text(
+                                  _student!.firstName.isNotEmpty &&
+                                          _student!.lastName.isNotEmpty
+                                      ? _student!.firstName[0] +
+                                          _student!.lastName[0]
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontSize: 36,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                     ),
                     const SizedBox(height: 24),
                     Card(
@@ -191,6 +205,48 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                               ),
                             if (_student!.gender != null)
                               _buildInfoRow('Gender', _student!.gender!),
+                            if (_student!.skills.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(
+                                      width: 120,
+                                      child: Text(
+                                        'Skills',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textLightColor,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children:
+                                            _student!.skills
+                                                .map(
+                                                  (skill) => Chip(
+                                                    label: Text(skill),
+                                                    backgroundColor: AppTheme
+                                                        .primaryColor
+                                                        .withOpacity(0.1),
+                                                    labelStyle: const TextStyle(
+                                                      color:
+                                                          AppTheme.primaryColor,
+                                                    ),
+                                                  ),
+                                                )
+                                                .toList(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
